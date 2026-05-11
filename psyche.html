@@ -8,10 +8,11 @@
 <style>
   html, body {
     margin:0; padding:0; width:100%; height:100%; overflow:hidden;
-    background:#ffffff; font-family: Georgia, 'Times New Roman', serif;
+    background: #d8e8f4;
+    font-family: Georgia, 'Times New Roman', serif;
   }
   #stage {
-    position:relative; width:100vw; height:100vh; background:#ffffff;
+    position:relative; width:100vw; height:100vh; background: transparent;
     display:flex; flex-direction:row;
   }
   #mount-area {
@@ -21,61 +22,7 @@
     height: 100%;
   }
   #mount  { width:100%; height:100%; }
-  #side-strip {
-    flex: 0 0 0;
-    width: 0;
-    align-self: flex-start;
-    max-height: 100%;
-    background: rgba(248, 240, 218, 0.97);
-    border-left: 1px solid #c8a85c;
-    border-bottom: 1px solid #c8a85c;
-    overflow-y: auto;
-    overflow-x: hidden;
-    transition: flex-basis 0.18s, width 0.18s;
-    box-sizing: border-box;
-  }
-  #side-strip.open {
-    flex: 0 0 320px;
-    width: 320px;
-    padding: 14px 16px;
-  }
-  #side-strip > .strip-pane { display: none; }
-  #side-strip > .strip-pane.active { display: block; }
-  #side-strip .strip-close {
-    position: absolute;
-    top: 6px; right: 10px;
-    background: none; border: none;
-    font-size: 18px; font-weight: bold;
-    color: #6b4a1a; cursor: pointer;
-    font-family: inherit;
-    padding: 2px 8px;
-  }
-  #side-strip .strip-close:hover { color: #2a1808; }
-  #side-strip .strip-title {
-    font-weight: bold; color: #4a3010;
-    font-size: 14px; margin: 0 0 8px 0;
-    border-bottom: 1px solid #c8a85c; padding-bottom: 4px;
-  }
-  /* When the existing inline panels are reparented into the side-strip,
-     strip away the absolute positioning, fixed widths, and toggle them
-     via the strip-pane wrapper instead. */
-  #side-strip #camera-panel,
-  #side-strip #points-panel,
-  #side-strip #panel-menu {
-    position: static;
-    top: auto; right: auto; bottom: auto; left: auto;
-    transform: none;
-    width: 100%;
-    max-width: 100%;
-    max-height: none;
-    margin: 0;
-    border: none;
-    box-shadow: none;
-    background: transparent;
-    padding: 0;
-    overflow: visible;
-    display: block;
-  }
+  #side-strip { display: none; }
 
 /* Title block, upper-center, non-interactive */
 #title-block {
@@ -478,23 +425,6 @@ z-index: 8;
   <div class="footer">Drag scene to orbit &middot; scroll or pinch to zoom</div>
 </div>
 
-<!-- Important Points button (overlay on canvas, opens side-strip pane) -->
-<button id="points-toggle">Important Points &#9652;</button>
-<div id="points-panel">
-  <h3>Important Points</h3>
-  <p>The <span class="term">Ego</span> is the organ of our average waking consciousness. Through it, we exercise direct control over the <span class="term">Body</span> through our <span class="term">Will</span>, but not without influences from the deeper regions. In Greek, <span class="greek">Diánoia</span> (mind related to will) and <span class="greek">Techne</span> (mind related to analytic or technical knowledge) are distinctions English combines into &ldquo;Ego&rdquo; or &ldquo;conscious mind&rdquo;.</p>
-
-  <p><span class="term">Persona</span> is the mask or front we put on for the public. When we over-identify with this outer self, living life primarily to please others, we lose contact with our deeper self and begin to experience ourselves as a shell, hollow, or shallow&mdash;not our true self. This causes our unfulfilled life potential to dam up under the organizing force of the <span class="term">Shadow</span>.</p>
-
-  <p>The Shadow operates according to self-protective instincts. It collects the fragmented reactions and memories of our lives which are not integrated into the flow of wholeness of our higher unconscious. Lacking an empowered, integrating center, the Shadow and <span class="term">Lower Unconscious</span> react with a reflexive fight-or-flight response to situations of threat, sometimes overcoming the <span class="term">Ego Defenses&rsquo;</span> ability to contain them. From this process arises our compulsions, addictions, and other immature feelings and behaviors. The parallel Greek term is <span class="greek">Sarx</span>. Thus the Shadow can be seen as the organizing program for &ldquo;sinful nature&rdquo;. Notice how the <span class="greek">Sarx</span> rises to form a separation or &ldquo;veil&rdquo; between our consciousness and our deeper self and spirituality.</p>
-
-  <p>The higher values and spirituality of the <span class="term">Human Spirit</span> are mediated by the <span class="greek">Nous</span> or <span class="term">Higher Unconscious</span>. These communicate to our consciousness largely through symbols and higher intuition and are best experienced through inward stillness.</p>
-
-  <p>The inward center of our soul is the <span class="term">Still Point</span>. In calm centeredness, we feel most genuinely ourselves. This is where our consciousness rests in deep relaxation, reflection, deep prayer, meditation, and contemplation. The latter three can involve even higher realms as well.</p>
-
-  <p>Symbols uniting masculine and feminine are among the highest in the <span class="greek">nous</span>, e.g. spiritual marriage imagery of <span class="greek">Song of Songs</span>. These arise from the <span class="term">Anima/Animus</span>. The highest psychic organizer, beyond symbol and concept, is the <span class="term">Archetypal Self</span>. It and God are the source of <span class="term">dreams</span> which often <span class="term">depict the various lower parts</span>.</p>
-</div>
-
 <div id="control-panel">
   <div id="panel-button">
     <span class="caret">&#9656;</span>
@@ -562,7 +492,7 @@ z-index: 8;
     <div class="menu-section">Annotations</div>
     <div class="row">
       <input type="checkbox" id="cb-floatingPoints" data-key="floatingPoints" />
-      <label for="cb-floatingPoints">Floating Important Points (HTML)</label>
+      <label for="cb-floatingPoints">Floating Important Points</label>
     </div>
 
     <!-- More sections (Regions, Archetypes, Ego, Annotations) added as zones grow -->
@@ -590,7 +520,7 @@ z-index: 8;
   const w = mount.clientWidth, h = mount.clientHeight;
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0xffffff);
+  scene.background = new THREE.Color(0xd8e8f4);
 
   const camera = new THREE.PerspectiveCamera(40, w / h, 0.1, 1000);
   // Camera state for hand-rolled orbit (spherical around target)
@@ -626,7 +556,7 @@ z-index: 8;
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
   renderer.setPixelRatio(window.devicePixelRatio);
   renderer.setSize(w, h);
-  renderer.setClearColor(0xffffff, 1);
+  renderer.setClearColor(0xd8e8f4, 1);
   renderer.localClippingEnabled = true;   // enable per-material clipping planes
   mount.appendChild(renderer.domElement);
 
@@ -661,7 +591,7 @@ z-index: 8;
     stillPoint:   true,
     archetypeBands: true,
     traumaticComplex: true,
-    floatingPoints: false,
+    floatingPoints: true,
     spiritualAxis: true,
     archetypalOvoid: true,
     openingText: true,
@@ -3953,120 +3883,56 @@ z-index: 8;
   tick();
 
   // ====================================================================
-  // 8. SIDE-STRIP PANEL WIRING
+  // 8. PANEL WIRING — drop-downs anchored to their buttons
   //
-  // Three drop-down panels (Click Here / Camera Angles / Important
-  // Points) all dock into the right-side strip.  Buttons stay in their
-  // canvas corners.  Only one pane is active at a time.  Clicking the
-  // same button again closes the strip.
+  // Each button toggles its own panel.  Only one panel open at a time;
+  // clicking outside closes the open one.
   // ====================================================================
-  const sideStrip = document.getElementById("side-strip");
-
-  // Wrap each existing panel in a strip-pane div, give it a title +
-  // close button, and reparent into the side-strip.
-  function makeStripPane(panelEl, paneId, title) {
-    const pane = document.createElement("div");
-    pane.className = "strip-pane";
-    pane.id = paneId;
-    pane.style.position = "relative";
-
-    const closeBtn = document.createElement("button");
-    closeBtn.className = "strip-close";
-    closeBtn.innerHTML = "&times;";
-    closeBtn.setAttribute("aria-label", "Close");
-    pane.appendChild(closeBtn);
-
-    const titleEl = document.createElement("div");
-    titleEl.className = "strip-title";
-    titleEl.textContent = title;
-    pane.appendChild(titleEl);
-
-    if (panelEl) {
-      panelEl.classList.remove("open");
-      pane.appendChild(panelEl);
-    }
-    sideStrip.appendChild(pane);
-
-    closeBtn.addEventListener("click", () => closeStrip());
-    return pane;
-  }
-
-  const panelMenu   = document.getElementById("panel-menu");
-  const cameraPanel = document.getElementById("camera-panel");
-  const pointsPanel = document.getElementById("points-panel");
-
-  // The Click-Here panel HTML had panel-menu nested inside
-  // #control-panel alongside #panel-button.  Pull #panel-menu out
-  // (panel-button stays in its corner).
-  if (panelMenu && panelMenu.parentElement &&
-      panelMenu.parentElement.id === "control-panel") {
-    // ok, will be reparented by makeStripPane
-  }
-
-  const paneControls = makeStripPane(panelMenu,   "pane-controls", "Scene Controls");
-  const paneCamera   = makeStripPane(cameraPanel, "pane-camera",   "Camera Angles");
-  const panePoints   = makeStripPane(pointsPanel, "pane-points",   "Important Points");
-
-  let activePaneId = null;
-
-  function fireResize() {
-    // Notify Three.js renderer the canvas size changed so it can
-    // update its aspect/viewport when the strip opens/closes.
-    window.dispatchEvent(new Event("resize"));
-  }
-
-  function setActivePane(paneId) {
-    [paneControls, paneCamera, panePoints].forEach((p) => {
-      p.classList.toggle("active", p && p.id === paneId);
-    });
-    activePaneId = paneId;
-    sideStrip.classList.add("open");
-    // Defer resize until after the CSS transition starts so the layout
-    // settles.  A second resize at the end of the transition keeps the
-    // canvas crisp.
-    requestAnimationFrame(fireResize);
-    setTimeout(fireResize, 220);
-    updateButtonCarets();
-  }
-
-  function closeStrip() {
-    activePaneId = null;
-    sideStrip.classList.remove("open");
-    [paneControls, paneCamera, panePoints].forEach((p) => {
-      if (p) p.classList.remove("active");
-    });
-    requestAnimationFrame(fireResize);
-    setTimeout(fireResize, 220);
-    updateButtonCarets();
-  }
-
-  function togglePane(paneId) {
-    if (activePaneId === paneId) closeStrip();
-    else setActivePane(paneId);
-  }
-
-  // Buttons (still in their corners over the canvas).
   const panelButton     = document.getElementById("panel-button");
+  const panelMenu       = document.getElementById("panel-menu");
   const cameraToggleBtn = document.getElementById("camera-toggle");
-  const pointsToggleBtn = document.getElementById("points-toggle");
+  const cameraPanel     = document.getElementById("camera-panel");
 
-  function updateButtonCarets() {
-    if (panelButton) {
-      panelButton.classList.toggle("open", activePaneId === "pane-controls");
-    }
-    if (cameraToggleBtn) {
-      cameraToggleBtn.innerHTML = activePaneId === "pane-camera"
-        ? "Camera Angles &#9652;" : "Camera Angles &#9662;";
-    }
-    if (pointsToggleBtn) {
-      pointsToggleBtn.innerHTML = activePaneId === "pane-points"
-        ? "Important Points &#9662;" : "Important Points &#9652;";
-    }
+  function closeAllPanels() {
+    if (panelMenu) panelMenu.classList.remove("open");
+    if (panelButton) panelButton.classList.remove("open");
+    if (cameraPanel) cameraPanel.classList.remove("open");
+    if (cameraToggleBtn) cameraToggleBtn.innerHTML = "Camera Angles &#9662;";
   }
 
-  if (panelButton)     panelButton.addEventListener("click",     () => togglePane("pane-controls"));
-  if (cameraToggleBtn) cameraToggleBtn.addEventListener("click", () => togglePane("pane-camera"));
-  if (pointsToggleBtn) pointsToggleBtn.addEventListener("click", () => togglePane("pane-points"));
+  if (panelButton && panelMenu) {
+    panelButton.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const isOpen = panelMenu.classList.contains("open");
+      closeAllPanels();
+      if (!isOpen) {
+        panelMenu.classList.add("open");
+        panelButton.classList.add("open");
+      }
+    });
+  }
+
+  if (cameraToggleBtn && cameraPanel) {
+    cameraToggleBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const isOpen = cameraPanel.classList.contains("open");
+      closeAllPanels();
+      if (!isOpen) {
+        cameraPanel.classList.add("open");
+        cameraToggleBtn.innerHTML = "Camera Angles &#9652;";
+      }
+    });
+  }
+
+  // Click outside a panel closes everything.  We listen on document
+  // and bail out if the click happened inside any panel or button.
+  document.addEventListener("click", (e) => {
+    if (panelMenu && panelMenu.contains(e.target)) return;
+    if (cameraPanel && cameraPanel.contains(e.target)) return;
+    if (panelButton && panelButton.contains(e.target)) return;
+    if (cameraToggleBtn && cameraToggleBtn.contains(e.target)) return;
+    closeAllPanels();
+  });
 
   document.querySelectorAll('input[type=checkbox][data-key]').forEach((cb) => {
     const key = cb.getAttribute("data-key");
