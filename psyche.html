@@ -431,6 +431,4123 @@ z-index: 8;
 
   <div class="ctrl-label">Longitude (rotate around axis)</div>
   <input type="range" id="longitude-slider"
+         min="0" max="360" value="9" step="1" />
+
+  <div class="ctrl-label">Side-to-side pan (left / right)</div>
+  <input type="range" id="pan-slider"
+         min="-6" max="6" value="0" step="0.05" />
+
+  <div class="footer">Drag scene to orbit &middot; scroll or pinch to zoom</div>
+</div>
+
+<div id="control-panel">
+  <div id="panel-button">
+    <span class="caret">&#9656;</span>
+    <span>Scene Controls</span>
+  </div>
+  <div id="panel-menu">
+    <div class="menu-section">Shells</div>
+    <div class="row">
+      <input type="checkbox" id="cb-soulShell" data-key="soulShell" />
+      <label for="cb-soulShell">Soul boundary</label>
+    </div>
+    <div class="row">
+      <input type="checkbox" id="cb-sarxShell" data-key="sarxShell" />
+      <label for="cb-sarxShell">Sarx (Lower Unconscious)</label>
+    </div>
+    <div class="row">
+      <input type="checkbox" id="cb-stillPoint" data-key="stillPoint" />
+      <label for="cb-stillPoint">Still Point</label>
+    </div>
+    <div class="row">
+      <input type="checkbox" id="cb-archetypeBands" data-key="archetypeBands" />
+      <label for="cb-archetypeBands">Archetype bands (∞ symbols + pathways)</label>
+    </div>
+
+    <div class="menu-section">Core Archetypes (anima/us, gender, shadow)</div>
+    <div class="row">
+      <input type="checkbox" id="cb-archetypes" data-key="archetypes" />
+      <label for="cb-archetypes"><b>Core Archetypes</b></label>
+    </div>
+
+    <div class="menu-section">IMAGES</div>
+    <div class="row">
+      <input type="checkbox" id="cb-spiritualAxis" data-key="spiritualAxis" />
+      <label for="cb-spiritualAxis">Archetypal Self / Human Spirit (cone)</label>
+    </div>
+    <div class="row">
+      <input type="checkbox" id="cb-archetypalOvoid" data-key="archetypalOvoid" />
+      <label for="cb-archetypalOvoid">Archetypal Self ovoid (rim enclosure)</label>
+    </div>
+    <div class="row">
+      <input type="checkbox" id="cb-tunnel" data-key="tunnel" />
+      <label for="cb-tunnel">Tunnel (Inner Path / Opening)</label>
+    </div>
+    <div class="row">
+      <input type="checkbox" id="cb-traumaticComplex" data-key="traumaticComplex" />
+      <label for="cb-traumaticComplex">Traumatic Complex (figures)</label>
+    </div>
+    <div class="row">
+      <input type="checkbox" id="cb-egoLens" data-key="egoLens" />
+      <label for="cb-egoLens">Ego (lens)</label>
+    </div>
+    <div class="row">
+      <input type="checkbox" id="cb-persona" data-key="persona" />
+      <label for="cb-persona">Persona</label>
+    </div>
+    <div class="row">
+      <input type="checkbox" id="cb-willVortex" data-key="willVortex" />
+      <label for="cb-willVortex">Will (vortex)</label>
+    </div>
+    <div class="row">
+      <input type="checkbox" id="cb-body" data-key="body" />
+      <label for="cb-body">Body (hatched film)</label>
+    </div>
+
+    <div class="menu-section">Ego Defenses (brick wall)</div>
+    <div style="padding: 2px 4px;">
+      <div style="font-size: 10.5px; margin-bottom: 2px; display: flex; justify-content: space-between;">
+        <span>solid</span>
+        <span>permeable</span>
+      </div>
+      <input type="range" id="porosity-slider"
+             min="0" max="1" step="0.02" value="0.5"
+             style="width: 100%; margin: 0;" />
+    </div>
+
+    <div class="menu-section">Annotations</div>
+    <div class="row">
+      <input type="checkbox" id="cb-floatingPoints" data-key="floatingPoints" />
+      <label for="cb-floatingPoints">Floating Important Points</label>
+    </div>
+
+    <!-- More sections (Regions, Archetypes, Ego, Annotations) added as zones grow -->
+  </div>
+</div>
+
+<div id="camera-hint">drag to rotate · scroll to zoom · right-drag to pan</div>
+```
+
+    </div><!-- /#mount-area -->
+    <div id="side-strip"></div>
+  </div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+<script>
+(function () {
+  "use strict";
+
+  // ====================================================================
+  // 1. SCENE / CAMERA / RENDERER
+  // ====================================================================
+
+  const mount = document.getElementById("mount");
+  const w = mount.clientWidth, h = mount.clientHeight;
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0xd8e8f4);
+
+  const camera = new THREE.PerspectiveCamera(40, w / h, 0.1, 1000);
+  // Camera state for hand-rolled orbit (spherical around target)
+  const camState = {
+    target: new THREE.Vector3(0, 0, 0),
+    radius: 18,
+    theta: Math.PI * 0.05,    // azimuth: ~9° east of straight-on, EGO/WILL visible
+    phi:   Math.PI * 0.46,    // polar: just slightly above equator
+    lateralOffset: 0,         // side-to-side pan (perpendicular to look dir)
+  };
+  function updateCamera() {
+    const r = camState.radius;
+    const sinPhi = Math.sin(camState.phi);
+    // Base camera position from spherical orbit around target
+    const cx = camState.target.x + r * sinPhi * Math.sin(camState.theta);
+    const cy = camState.target.y + r * Math.cos(camState.phi);
+    const cz = camState.target.z + r * sinPhi * Math.cos(camState.theta);
+    // Lateral offset: shift both camera and target perpendicular to look
+    // direction (in the horizontal plane).  Side vector = perpendicular to
+    // the azimuthal projection of the view direction.
+    const sideX = -Math.cos(camState.theta);
+    const sideZ =  Math.sin(camState.theta);
+    const off = camState.lateralOffset;
+    camera.position.set(cx + off * sideX, cy, cz + off * sideZ);
+    camera.lookAt(
+      camState.target.x + off * sideX,
+      camState.target.y,
+      camState.target.z + off * sideZ
+    );
+  }
+  updateCamera();
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+  renderer.setPixelRatio(window.devicePixelRatio);
+  renderer.setSize(w, h);
+  renderer.setClearColor(0xd8e8f4, 1);
+  renderer.localClippingEnabled = true;   // enable per-material clipping planes
+  mount.appendChild(renderer.domElement);
+
+  // ====================================================================
+  // 2. LIGHTING
+  // ====================================================================
+
+  scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+
+  const keyLight = new THREE.DirectionalLight(0xffffff, 0.7);
+  keyLight.position.set(4, 6, 5);
+  scene.add(keyLight);
+
+  const fillLight = new THREE.DirectionalLight(0xffffff, 0.3);
+  fillLight.position.set(-4, 2, -3);
+  scene.add(fillLight);
+
+  // ====================================================================
+  // 3. REFS / VISIBILITY (central state for every toggleable group)
+  // ====================================================================
+
+  const refs = {};
+  const visibility = {
+    soulShell:    true,
+    sarxShell:    true,
+    shadowShell:  true,
+    archetypes:   true,
+    posAnimus:    true,
+    primary:      true,
+    genderArch:   true,
+    negAnimus:    true,
+    stillPoint:   true,
+    archetypeBands: true,
+    traumaticComplex: true,
+    floatingPoints: true,
+    spiritualAxis: true,
+    archetypalOvoid: true,
+    openingText: true,
+    nousText: true,
+    sarxText: true,
+    gloryText: true,
+    humanSpiritText: true,
+    tunnel:       true,
+    egoLens:      true,
+    egoText:      true,
+    innerPathText: true,
+    egoDefensesInscription: true,
+    willText:     true,
+    bodyText:     true,
+    primaryGAText: true,
+    persona:      true,
+    willVortex:   true,
+    body:         true,
+    labels:           true,
+    labelSoul:        true,
+    labelSarx:        true,
+    labelShadow:      true,
+    labelStillPoint:  true,
+    labelAxis:        true,
+    labelOpening:     true,
+    labelInnerPath:   true,
+    labelEgoDefenses: true,
+    labelWill:        true,
+    labelBody:        true,
+    labelPersona:     true,
+    labelPosAnimus:   true,
+    labelPrimary:     true,
+    labelGenderArch:  true,
+    labelNegAnimus:   true,
+  };
+
+  function applyVisibility() {
+    if (refs.soulShell)     refs.soulShell.visible     = visibility.soulShell;
+    if (refs.sarxShell)     refs.sarxShell.visible     = visibility.sarxShell;
+    if (refs.shadowWedge)   refs.shadowWedge.visible   = visibility.archetypes && visibility.shadowShell;
+
+    if (refs.posAnimus)  refs.posAnimus.visible  =
+      visibility.archetypes && (visibility.posAnimus || visibility.negAnimus);
+    if (refs.primary)    refs.primary.visible    =
+      visibility.archetypes && (visibility.primary || visibility.genderArch);
+    if (refs.genderArch) refs.genderArch.visible = visibility.archetypes && visibility.genderArch;
+    if (refs.negAnimus)  refs.negAnimus.visible  = visibility.archetypes && visibility.negAnimus;
+
+    if (refs.primaryGAText) refs.primaryGAText.visible =
+      visibility.archetypes && visibility.primaryGAText;
+
+    if (refs.stillPoint)    refs.stillPoint.visible    = visibility.stillPoint;
+    if (refs.archetypeBands) refs.archetypeBands.visible = visibility.archetypeBands;
+    if (refs.traumaticComplex) refs.traumaticComplex.visible = visibility.traumaticComplex;
+    if (refs.spiritualAxis) refs.spiritualAxis.visible = visibility.spiritualAxis;
+    if (refs.archetypalOvoid) refs.archetypalOvoid.visible = visibility.archetypalOvoid;
+    if (refs.openingText) refs.openingText.visible = visibility.openingText;
+    if (refs.nousText) refs.nousText.visible = visibility.nousText;
+    if (refs.sarxText) refs.sarxText.visible = visibility.sarxText;
+    // Texts paired with geometry — visible iff parent geometry is visible.
+    if (refs.gloryText) refs.gloryText.visible = visibility.spiritualAxis;
+    if (refs.humanSpiritText) refs.humanSpiritText.visible = visibility.archetypalOvoid;
+
+    if (refs.tunnel) refs.tunnel.visible = visibility.tunnel;
+    if (refs.innerPathText) refs.innerPathText.visible = visibility.tunnel;
+
+    if (refs.egoLens) refs.egoLens.visible = visibility.egoLens;
+    if (refs.egoText) refs.egoText.visible = visibility.egoLens;
+    if (refs.egoDefensesInscription) {
+      refs.egoDefensesInscription.visible = false;
+    }
+
+    if (refs.willVortex) refs.willVortex.visible = visibility.persona && visibility.willVortex;
+    if (refs.willText)   refs.willText.visible   = visibility.persona && visibility.willVortex;
+    if (refs.body)       refs.body.visible       = visibility.persona && visibility.body;
+    if (refs.bodyText)   refs.bodyText.visible   = visibility.persona && visibility.body;
+
+    if (refs.labelSoul)       refs.labelSoul.visible       = visibility.labels && visibility.labelSoul;
+    if (refs.labelSarx)       refs.labelSarx.visible       = visibility.labels && visibility.labelSarx;
+    if (refs.labelShadow)     refs.labelShadow.visible     = visibility.labels && visibility.labelShadow;
+    if (refs.labelStillPoint) refs.labelStillPoint.visible = visibility.labels && visibility.labelStillPoint;
+    if (refs.labelAxis)       refs.labelAxis.visible       = visibility.labels && visibility.labelAxis;
+    if (refs.labelOpening)    refs.labelOpening.visible    = visibility.labels && visibility.labelOpening;
+    if (refs.labelInnerPath)  refs.labelInnerPath.visible  = visibility.labels && visibility.labelInnerPath;
+    if (refs.labelEgoDefenses) refs.labelEgoDefenses.visible = visibility.labels && visibility.labelEgoDefenses;
+    if (refs.labelWill)        refs.labelWill.visible        = visibility.labels && visibility.labelWill;
+    if (refs.labelBody)        refs.labelBody.visible        = visibility.labels && visibility.labelBody;
+    if (refs.labelPersona)     refs.labelPersona.visible     = visibility.labels && visibility.labelPersona;
+    if (refs.labelPosAnimus)   refs.labelPosAnimus.visible   = visibility.labels && visibility.labelPosAnimus;
+    if (refs.labelPrimary)     refs.labelPrimary.visible     = visibility.labels && visibility.labelPrimary;
+    if (refs.labelGenderArch)  refs.labelGenderArch.visible  = visibility.labels && visibility.labelGenderArch;
+    if (refs.labelNegAnimus)   refs.labelNegAnimus.visible   = visibility.labels && visibility.labelNegAnimus;
+  }
+
+  // ====================================================================
+  // 4. GEOMETRY
+  // ====================================================================
+
+  const lensClipPlane = new THREE.Plane(new THREE.Vector3(-1, 0, 0), 2.0);
+
+  function buildSoulShell() {
+    const group = new THREE.Group();
+
+    // Carve a small circular hole at the top where the spiritual axis
+    // cone exits the soul boundary on its way to the starburst.  The
+    // hole is built by omitting a phi cap from each sphere layer.  The
+    // cap is omitted at the +Y pole of the geometry, then each MESH is
+    // rotated so the omitted cap aligns with the cone's direction.
+    const HOLE_PHI = 0.10;     // cap half-angle in radians (~5.7°)
+
+    // Cone direction from origin toward starburst at (-1.0, 3.65, 0).
+    // The rotation that takes +Y to the cone direction is what we apply
+    // to each sphere mesh so its missing cap ends up at the breach.
+    const coneDir = new THREE.Vector3(-1.0, 3.65, 0).normalize();
+    const yAxis = new THREE.Vector3(0, 1, 0);
+    const holeQuat = new THREE.Quaternion().setFromUnitVectors(yAxis, coneDir);
+
+    const innerGeo = new THREE.SphereGeometry(
+      3.0, 64, 48,
+      0, Math.PI * 2,
+      HOLE_PHI, Math.PI - HOLE_PHI
+    );
+    const innerMat = new THREE.MeshStandardMaterial({
+      color: 0xb8b8b8,
+      transparent: true,
+      opacity: 0.18,
+      roughness: 0.55,
+      metalness: 0.05,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    const innerMesh = new THREE.Mesh(innerGeo, innerMat);
+    innerMesh.quaternion.copy(holeQuat);
+    group.add(innerMesh);
+
+    const sheenGeo = new THREE.SphereGeometry(
+      3.06, 64, 48,
+      0, Math.PI * 2,
+      HOLE_PHI, Math.PI - HOLE_PHI
+    );
+    const sheenMat = new THREE.MeshBasicMaterial({
+      color: 0x8a5a18,
+      transparent: true,
+      opacity: 0.42,
+      side: THREE.BackSide,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const sheenMesh = new THREE.Mesh(sheenGeo, sheenMat);
+    sheenMesh.quaternion.copy(holeQuat);
+    group.add(sheenMesh);
+
+    // Upper hemisphere cap: NO hole and NO rotation, so its equator
+    // stays level in the X-Z plane.  Putting a hole here would require
+    // rotating the geometry, which would tilt the visible equator and
+    // misalign the cap with the lower hemisphere.  The cone is
+    // translucent enough that no hole in this cap layer is fine — the
+    // hole in the inner and sheen layers reads as the breach.
+    const upperGeo = new THREE.SphereGeometry(
+      2.99, 56, 32,
+      0, Math.PI * 2,
+      0, Math.PI * 0.5
+    );
+    const upperMat = new THREE.MeshStandardMaterial({
+      color: 0xf5d595,
+      emissive: 0x7a5418,
+      emissiveIntensity: 0.30,
+      transparent: true,
+      opacity: 0.32,
+      roughness: 0.55,
+      metalness: 0.05,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      clippingPlanes: [lensClipPlane],
+    });
+    const upperMesh = new THREE.Mesh(upperGeo, upperMat);
+    group.add(upperMesh);
+
+    const eqGeo = new THREE.BufferGeometry();
+    const eqPts = [];
+    for (let i = 0; i <= 128; i++) {
+      const a = (i / 128) * Math.PI * 2;
+      eqPts.push(new THREE.Vector3(Math.cos(a) * 3.0, 0, Math.sin(a) * 3.0));
+    }
+    eqGeo.setFromPoints(eqPts);
+    const eqLine = new THREE.Line(eqGeo, new THREE.LineBasicMaterial({
+      color: 0x8a7530, transparent: true, opacity: 0.35,
+    }));
+    group.add(eqLine);
+
+    // Outline ring around the hole's perimeter — gives the aperture a
+    // clean drawn edge.  Built as a circle in the X-Z plane near the
+    // top pole, then placed in a Group that's rotated by holeQuat.
+    const ringR = 3.0 * Math.sin(HOLE_PHI);
+    const ringY = 3.0 * Math.cos(HOLE_PHI);
+    const ringGeo = new THREE.BufferGeometry();
+    const ringPts = [];
+    for (let i = 0; i <= 64; i++) {
+      const a = (i / 64) * Math.PI * 2;
+      ringPts.push(new THREE.Vector3(
+        Math.cos(a) * ringR,
+        ringY,
+        Math.sin(a) * ringR
+      ));
+    }
+    ringGeo.setFromPoints(ringPts);
+    const ringLine = new THREE.Line(ringGeo, new THREE.LineBasicMaterial({
+      color: 0x8a5a18, transparent: true, opacity: 0.65,
+    }));
+    ringLine.quaternion.copy(holeQuat);
+    group.add(ringLine);
+
+    return group;
+  }
+
+  refs.soulShell = buildSoulShell();
+  scene.add(refs.soulShell);
+
+  function buildSarxShell() {
+    const group = new THREE.Group();
+
+    const geo = new THREE.SphereGeometry(
+      2.85, 56, 32,
+      0, Math.PI * 2,
+      Math.PI * 0.5, Math.PI * 0.5
+    );
+    const mat = new THREE.MeshStandardMaterial({
+      color: 0x9a9a9a,
+      transparent: true,
+      opacity: 0.22,
+      roughness: 0.7,
+      metalness: 0.0,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      clippingPlanes: [lensClipPlane],
+    });
+    group.add(new THREE.Mesh(geo, mat));
+
+    const eqGeo = new THREE.BufferGeometry();
+    const eqPts = [];
+    for (let i = 0; i <= 128; i++) {
+      const a = (i / 128) * Math.PI * 2;
+      eqPts.push(new THREE.Vector3(Math.cos(a) * 2.85, 0, Math.sin(a) * 2.85));
+    }
+    eqGeo.setFromPoints(eqPts);
+    group.add(new THREE.Line(eqGeo, new THREE.LineBasicMaterial({
+      color: 0x555555, transparent: true, opacity: 0.45,
+    })));
+
+    return group;
+  }
+  refs.sarxShell = buildSarxShell();
+  scene.add(refs.sarxShell);
+
+  // ====================================================================
+  // ARCHETYPE LUNES
+  // ====================================================================
+
+  // Gradient texture for the archetype lunes.  Optionally accepts an
+  // `overlay` callback that paints additional content onto the canvas
+  // AFTER the gradient — typically text labels that should appear baked
+  // into the wedge's surface skin.  The overlay receives (ctx, w, h) so
+  // it can position content using canvas pixel coords; UV mapping on the
+  // sphere geometry then translates those positions to the curved surface.
+  //
+  //   stops:   either {start, end} or array of {pos, color}
+  //   overlay: optional fn(ctx, w, h) — paints on top of gradient
+  function makeGradientTexture(stops, overlay) {
+    // Larger canvas so any baked-in text renders crisply.
+    const w = 1024, h = 512;
+    const c = document.createElement("canvas");
+    c.width = w; c.height = h;
+    const ctx = c.getContext("2d");
+    const grad = ctx.createLinearGradient(0, 0, w, 0);
+
+    let stopList;
+    if (stops.start && stops.end) {
+      stopList = [{ pos: 0, color: stops.start }, { pos: 1, color: stops.end }];
+    } else {
+      stopList = stops;
+    }
+    for (const s of stopList) grad.addColorStop(s.pos, s.color);
+
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, w, h);
+
+    if (typeof overlay === "function") {
+      overlay(ctx, w, h);
+    }
+
+    const tex = new THREE.CanvasTexture(c);
+    tex.minFilter = THREE.LinearFilter;
+    tex.magFilter = THREE.LinearFilter;
+    tex.wrapS = THREE.ClampToEdgeWrapping;
+    tex.wrapT = THREE.ClampToEdgeWrapping;
+    return tex;
+  }
+
+  function buildArchetypeWedgeDisc(thetaStartXY, thetaLengthXY, colorOrGradient, overlay) {
+    const group = new THREE.Group();
+    const R = 1.05;
+
+    const phiStart  = (Math.PI * 1.5 - (thetaStartXY + thetaLengthXY) + 2 * Math.PI) % (2 * Math.PI);
+    const phiLength = thetaLengthXY;
+
+    const geo = new THREE.SphereGeometry(
+      R, 48, 32,
+      phiStart, phiLength,
+      0, Math.PI
+    );
+    geo.rotateX(Math.PI / 2);
+    geo.scale(1, -1, 1);
+
+    // Front-side only + depthWrite on: each lune renders only its outward-
+    // facing crust.  The back hemisphere (which would otherwise be visible
+    // through translucent objects in front of it) is omitted entirely, so
+    // the Still Point at the center reads as a clean amber globe — the
+    // colored wedges no longer tint it from behind.
+    // Higher opacity gives the crust a solid, painted-on quality.
+    const matOpts = {
+      transparent: true,
+      opacity: 0.78,
+      roughness: 0.55,
+      metalness: 0.05,
+      side: THREE.FrontSide,
+      depthWrite: true,
+    };
+
+    if (typeof colorOrGradient === "object" &&
+        (colorOrGradient.start || Array.isArray(colorOrGradient))) {
+      matOpts.map = makeGradientTexture(colorOrGradient, overlay);
+      matOpts.color = 0xffffff;
+    } else {
+      matOpts.color = colorOrGradient;
+    }
+
+    const mat = new THREE.MeshStandardMaterial(matOpts);
+    group.add(new THREE.Mesh(geo, mat));
+
+    return group;
+  }
+
+  refs.posAnimus = buildArchetypeWedgeDisc(
+    Math.PI * (180 / 180),
+    Math.PI * (150 / 180),
+    // Gradient: maroon at pos=0 (renders at the bottom of visible lune),
+    // blue at pos=1 (renders at the top).  This puts blue on top and
+    // maroon on bottom, matching the desired layout.
+    [
+      { pos: 0.00, color: "#8a1a28" },   // maroon — bottom of visible lune (NEGATIVE)
+      { pos: 0.15, color: "#7a1a2a" },
+      { pos: 0.35, color: "#5a3070" },
+      { pos: 0.55, color: "#2a4ab0" },
+      { pos: 1.00, color: "#1a3a8a" },   // deep blue — top of visible lune (POSITIVE)
+    ],
+    // Overlay: bake both Anima(-us) labels into the lune skin, using the
+    // same beveled style as PRIMARY GENDER ARCHETYPES.  V controls
+    // position along the wedge's longitudinal direction; the V values
+    // mirror the green-lune approach (V=0.70 placed PRIMARY near the
+    // still point on the green wedge — V is a hemisphere of the source
+    // sphere, so the "blue end" and "maroon end" of the lune correspond
+    // to the two halves of V).
+    function (ctx, w, h) {
+      ctx.save();
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+
+      const cx = w * 0.5;
+      const fontSize = 60;
+      ctx.font = "bold " + fontSize + "px Georgia, 'Times New Roman', serif";
+
+      function paintBeveledLetter(text, x, y) {
+        const depthSteps = 6;
+        for (let i = depthSteps; i >= 1; i--) {
+          const t = i / depthSteps;
+          const offX = i * 0.7;
+          const offY = i * 0.7;
+          const r = Math.round(40 + (235 - 40) * (1 - t));
+          const g = Math.round(60 + (240 - 60) * (1 - t));
+          const b = Math.round(40 + (220 - 40) * (1 - t));
+          ctx.fillStyle = "rgb(" + r + "," + g + "," + b + ")";
+          ctx.fillText(text, x + offX, y + offY);
+        }
+        ctx.lineWidth   = 2;
+        ctx.strokeStyle = "rgba(20, 30, 20, 0.85)";
+        ctx.strokeText(text, x, y);
+        ctx.fillStyle = "#ffffff";
+        ctx.fillText(text, x, y);
+        ctx.fillStyle = "rgba(255, 255, 230, 0.45)";
+        ctx.fillText(text, x - 0.6, y - 0.6);
+      }
+
+      // POSITIVE on the blue (top) area at U=0.70
+      const vTop = 0.65;
+      const xPos = w * 0.70;
+      paintBeveledLetter("POSITIVE", xPos, h * vTop);
+
+      // NEGATIVE on the maroon area at U=0.25 (same V — front-facing side)
+      const xNeg = w * 0.25;
+      paintBeveledLetter("NEGATIVE", xNeg, h * vTop);
+
+      // Shared ANIMA (-US) — single line centered horizontally between
+      // POSITIVE and NEGATIVE, positioned just below both so it reads as
+      // applying to either word above it.
+      const xShared = (xPos + xNeg) / 2;
+      const vShared = vTop + 0.10;     // small offset to test direction
+      ctx.letterSpacing = "8px";
+      paintBeveledLetter("ANIMA (-US)", xShared, h * vShared);
+      ctx.letterSpacing = "0px";
+
+      ctx.restore();
+    }
+  );
+  scene.add(refs.posAnimus);
+
+  refs.negAnimus = new THREE.Group();
+  scene.add(refs.negAnimus);
+
+  refs.primary = buildArchetypeWedgeDisc(
+    Math.PI * (30 / 180),
+    Math.PI * (150 / 180),
+    [
+      { pos: 0.00, color: "#1ab26a" },
+      { pos: 0.30, color: "#1ea060" },
+      { pos: 0.55, color: "#287a4a" },
+      { pos: 0.80, color: "#456a4c" },
+      { pos: 1.00, color: "#3a5040" },
+    ],
+    // Overlay: bake "PRIMARY GENDER ARCHETYPES" text into the lune's
+    // surface skin.  The canvas U axis (pixel x) maps to the lune's
+    // azimuthal sweep across the surface; V (pixel y) maps to its
+    // longitudinal direction.
+    //
+    // Faux-extrusion / beveled effect: each letter is painted multiple
+    // times with progressive offsets, going from a dark "back side" copy
+    // at the deepest offset, through a gradient of darkening side-wall
+    // shades, up to a bright white front face on top.  This builds up
+    // the visual illusion of letters embossed/beveled OUT of the wedge
+    // skin without using actual 3D geometry.
+    function (ctx, w, h) {
+      ctx.save();
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+
+      const cx = w * 0.5;
+      const fontSize = 60;
+      ctx.font = "bold " + fontSize + "px Georgia, 'Times New Roman', serif";
+
+      const v0 = 0.70;
+
+      function paintBeveledLetter(text, y) {
+        // Side-wall layers: darker copies at progressively larger
+        // down-right offsets.  Light direction is upper-left, so the
+        // shadow side of the bevel falls down-right.
+        const depthSteps = 6;
+        for (let i = depthSteps; i >= 1; i--) {
+          const t = i / depthSteps;
+          const offX = i * 0.7;
+          const offY = i * 0.7;
+          // Color fades from front-edge cream (close to the white face)
+          // back to a deep green-black at the deepest layer.
+          const r = Math.round(40 + (235 - 40) * (1 - t));
+          const g = Math.round(60 + (240 - 60) * (1 - t));
+          const b = Math.round(40 + (220 - 40) * (1 - t));
+          ctx.fillStyle = "rgb(" + r + "," + g + "," + b + ")";
+          ctx.fillText(text, cx + offX, y + offY);
+        }
+
+        // Front face: crisp dark outline + bright white fill on top
+        ctx.lineWidth   = 2;
+        ctx.strokeStyle = "rgba(20, 30, 20, 0.85)";
+        ctx.strokeText(text, cx, y);
+        ctx.fillStyle = "#ffffff";
+        ctx.fillText(text, cx, y);
+
+        // Tiny upper-left highlight glint to suggest the lit top edge of
+        // the bevel — a faint cream copy offset up-and-left of the front
+        // face.  Only on the top edge, so we paint it then mask by
+        // re-stroking the front face thinly.
+        ctx.fillStyle = "rgba(255, 255, 230, 0.45)";
+        ctx.fillText(text, cx - 0.6, y - 0.6);
+      }
+
+      paintBeveledLetter("PRIMARY GENDER", h * v0);
+      paintBeveledLetter("ARCHETYPES",     h * v0 + fontSize * 1.05);
+      ctx.restore();
+    }
+  );
+  scene.add(refs.primary);
+
+  refs.genderArch = new THREE.Group();
+  scene.add(refs.genderArch);
+
+  // Shadow: a proper 3D lune of the same construction as the Anima/us and
+  // Primary GA wedges, occupying the 60° gap at the bottom (centered at
+  // 6:00 in world angle).  In spec coordinates: starts at 330°, sweeps 60°,
+  // closing the ring between Anima/us (180°→330°) and Primary GA (30°→180°).
+  // Uses a degenerate single-color gradient (same gray at both ends) so
+  // the texture pipeline runs and we can bake "SHADOW" into the skin.
+  refs.shadowWedge = buildArchetypeWedgeDisc(
+    Math.PI * (330 / 180),
+    Math.PI * (60 / 180),
+    [
+      { pos: 0.00, color: "#787878" },
+      { pos: 1.00, color: "#787878" },
+    ],
+    // Overlay: bake "SHADOW" into the gray lune skin, beveled.  V is
+    // dialed close to where PRIMARY GENDER and the Anima labels read as
+    // "near the still point" on their respective wedges.
+    function (ctx, w, h) {
+      ctx.save();
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+
+      const cx = w * 0.5;
+      const fontSize = 84;     // larger than the standard 60 used elsewhere
+      ctx.font = "bold " + fontSize + "px Georgia, 'Times New Roman', serif";
+      ctx.letterSpacing = "10px";   // wider spacing between letters
+
+      function paintBeveledLetter(text, x, y) {
+        const depthSteps = 6;
+        for (let i = depthSteps; i >= 1; i--) {
+          const t = i / depthSteps;
+          const offX = i * 0.7;
+          const offY = i * 0.7;
+          const r = Math.round(40 + (235 - 40) * (1 - t));
+          const g = Math.round(60 + (240 - 60) * (1 - t));
+          const b = Math.round(40 + (220 - 40) * (1 - t));
+          ctx.fillStyle = "rgb(" + r + "," + g + "," + b + ")";
+          ctx.fillText(text, x + offX, y + offY);
+        }
+        ctx.lineWidth   = 2;
+        ctx.strokeStyle = "rgba(20, 30, 20, 0.85)";
+        ctx.strokeText(text, x, y);
+        ctx.fillStyle = "#ffffff";
+        ctx.fillText(text, x, y);
+        ctx.fillStyle = "rgba(255, 255, 230, 0.45)";
+        ctx.fillText(text, x - 0.6, y - 0.6);
+      }
+
+      // SHADOW positioned near the still point.  This wedge's UV mapping
+      // reverses canvas-X relative to the upper wedges, so painting
+      // "SHADOW" produces "WODAHS" on the surface.  We paint the string
+      // already reversed ("WODAHS") so it reads forward as "SHADOW" once
+      // wrapped onto the wedge.  V=0.35 places it on the still-point
+      // side (V→world is also flipped on this wedge compared to the
+      // upper ones).
+      // The shadow wedge's V axis runs in the opposite polar direction
+      // compared to the upper wedges — so the canvas at V=0.65 wraps
+      // onto a portion of the wedge that's "upside down" relative to
+      // the camera, and painted text comes out rotated 180°.  Counter
+      // by rotating the canvas 180° around its center BEFORE painting:
+      // the text paints upside-down on the canvas, which un-rotates
+      // when the canvas wraps onto the upside-down wedge surface.
+      const tx = cx, ty = h * 0.65;
+      ctx.translate(tx, ty);
+      ctx.rotate(Math.PI);
+      ctx.translate(-tx, -ty);
+      paintBeveledLetter("SHADOW", cx, h * 0.65);
+      ctx.restore();
+    }
+  );
+  scene.add(refs.shadowWedge);
+
+  // --- STILL POINT ---
+  function buildStillPoint() {
+    const group = new THREE.Group();
+
+    // Build a canvas texture for the still point core: gold sphere
+    // background with "STILL POINT" baked in dark golden letters at
+    // the front-facing UV center (U=0.5, V=0.5).
+    const canvasW = 1024, canvasH = 512;
+    const canvas = document.createElement("canvas");
+    canvas.width = canvasW; canvas.height = canvasH;
+    const ctx = canvas.getContext("2d");
+
+    // Background: solid warm gold matching the original core color (#d9913a)
+    ctx.fillStyle = "#d9913a";
+    ctx.fillRect(0, 0, canvasW, canvasH);
+
+    // Beveled "STILL POINT" — STILL above POINT — in dark gold tones
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    const fontSize = 78;
+    ctx.font = "bold " + fontSize + "px Georgia, 'Times New Roman', serif";
+    ctx.letterSpacing = "4px";
+
+    function paintBeveledLetter(text, x, y) {
+      // Side-wall layers: very dark warm-brown to medium-dark
+      const depthSteps = 5;
+      for (let i = depthSteps; i >= 1; i--) {
+        const t = i / depthSteps;
+        const offX = i * 0.7;
+        const offY = i * 0.7;
+        const r = Math.round(20 + (60 - 20) * (1 - t));
+        const g = Math.round(10 + (32 - 10) * (1 - t));
+        const b = Math.round(4  + (10 - 4)  * (1 - t));
+        ctx.fillStyle = "rgb(" + r + "," + g + "," + b + ")";
+        ctx.fillText(text, x + offX, y + offY);
+      }
+      // Front face: very dark warm brown with thicker near-black outline
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = "rgba(10, 5, 2, 1.0)";
+      ctx.strokeText(text, x, y);
+      ctx.fillStyle = "#1a0f04";
+      ctx.fillText(text, x, y);
+      // Subtle warm highlight on the upper-left edge — dimmer so it
+      // doesn't lighten the overall reading of the text.
+      ctx.fillStyle = "rgba(220, 180, 110, 0.35)";
+      ctx.fillText(text, x - 0.6, y - 0.6);
+    }
+
+    // STILL above POINT, centered on the front-facing UV.
+    // Three.js SphereGeometry default: U=0.25 is at +Z (camera-facing front).
+    const cx = canvasW * 0.25;
+    paintBeveledLetter("STILL", cx, canvasH * 0.42);
+    paintBeveledLetter("POINT", cx, canvasH * 0.58);
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.minFilter = THREE.LinearFilter;
+    tex.magFilter = THREE.LinearFilter;
+    tex.wrapS = THREE.ClampToEdgeWrapping;
+    tex.wrapT = THREE.ClampToEdgeWrapping;
+
+    const coreGeo = new THREE.SphereGeometry(0.40, 40, 28);
+    const coreMat = new THREE.MeshStandardMaterial({
+      map: tex,
+      color: 0xffffff,
+      emissive: 0xc97020,
+      emissiveIntensity: 0.55,    // slightly reduced so text reads clearly
+      transparent: false,
+      roughness: 0.35,
+      metalness: 0.25,
+      side: THREE.DoubleSide,
+      depthWrite: true,
+    });
+    group.add(new THREE.Mesh(coreGeo, coreMat));
+
+    const haloGeo = new THREE.SphereGeometry(0.48, 40, 28);
+    const haloMat = new THREE.MeshBasicMaterial({
+      color: 0xf0a040,
+      transparent: true,
+      opacity: 0.55,
+      side: THREE.BackSide,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    group.add(new THREE.Mesh(haloGeo, haloMat));
+
+    return group;
+  }
+  refs.stillPoint = buildStillPoint();
+  scene.add(refs.stillPoint);
+
+  // ====================================================================
+  // ARCHETYPE BANDS — figure-8 (∞) symbols on upper and lower inside
+  // surface of soul sphere, with thin pathway lines connecting each
+  // symbol to a target on the inner wedge ring.
+  //
+  // In Troy's diagram, these symbols mark the archetypal patterns —
+  // "instinctual, universal patterns of natural motivation and natural
+  // revelation, with bipolar structure."  The bipolar structure is
+  // evoked by the figure-8: two loops joined at a center, each loop
+  // representing one polarity of an archetype.
+  // ====================================================================
+
+  function buildArchetypeBands() {
+    const group = new THREE.Group();
+
+    // Linear arc of figure-8 "scales" running along a vertical great
+    // circle of the soul sphere (the X-Y plane, z=0).  Symbols start
+    // just above the brick wall on the upper-east edge, sweep CCW over
+    // the top of the sphere, around the west side, down the back, and
+    // stop just below the brick wall on the lower-east edge — a clean
+    // 200° arc that avoids passing through the brick wall.  Each
+    // symbol billboards to the camera so it always faces the viewer.
+    //
+    // Pulled inward to bandR=2.65 so the symbols (with their
+    // billboarded extent) stay clearly inside the soul boundary at 3.0.
+    const bandR = 2.65;
+
+    const startDeg = 110;           // upper-left, just past the ovoid
+    const sweepDeg = 170;           // CCW around the back to lower-east
+    const symbolCount = 16;
+    const stepDeg = sweepDeg / (symbolCount - 1);
+
+    function buildInfinitySymbol(scale, gradientT, transparency, separation) {
+      // Smaller chunkier figure-8.  gradientT runs 0..1 along the arc:
+      // 0 = first symbol (top of brick wall, brightest gold),
+      // 1 = last symbol (bottom of brick wall, darkest gray).
+      // transparency: 0 = fully opaque, 1 = fully transparent.
+      // separation: 0 = joined figure-8 (default); >0 pulls the two
+      // loops apart by that amount.  At the bottom of Troy's diagram
+      // the ∞ pairs separate as a visual signature of trauma — the
+      // fusion of opposites breaks down at the deepest unconscious.
+      const sep = separation || 0;
+      const g = new THREE.Group();
+
+      const ringR = 0.05625 * scale;  // 25% smaller (was 0.075)
+      const tubeR = 0.0165  * scale;  // 25% smaller (was 0.022)
+
+      // Gradient interpolation: start with bright gold, ease through
+      // warm bronze and dimmer bronze, ending at neutral gray.  Stops
+      // at five points across the arc so the descent feels gradual.
+      function interpColor(t) {
+        const stops = [
+          { t: 0.00, c: { r: 0xea, g: 0xc2, b: 0x6a } },  // bright gold
+          { t: 0.25, c: { r: 0xc9, g: 0x88, b: 0x3a } },  // warm bronze
+          { t: 0.50, c: { r: 0x8a, g: 0x6a, b: 0x40 } },  // dim bronze
+          { t: 0.75, c: { r: 0x68, g: 0x5a, b: 0x4a } },  // bronzy gray
+          { t: 1.00, c: { r: 0x4a, g: 0x4a, b: 0x4a } },  // medium gray
+        ];
+        let lo = stops[0], hi = stops[stops.length - 1];
+        for (let i = 0; i < stops.length - 1; i++) {
+          if (t >= stops[i].t && t <= stops[i + 1].t) {
+            lo = stops[i]; hi = stops[i + 1];
+            break;
+          }
+        }
+        const span = hi.t - lo.t;
+        const k = span > 0 ? (t - lo.t) / span : 0;
+        return {
+          r: Math.round(lo.c.r + (hi.c.r - lo.c.r) * k),
+          g: Math.round(lo.c.g + (hi.c.g - lo.c.g) * k),
+          b: Math.round(lo.c.b + (hi.c.b - lo.c.b) * k),
+        };
+      }
+      function asHex(c) { return (c.r << 16) | (c.g << 8) | c.b; }
+
+      const baseC  = interpColor(gradientT);
+      const baseHex = asHex(baseC);
+      // Emissive stays as a slightly darker version of the base color
+      const emHex = asHex({
+        r: Math.round(baseC.r * 0.45),
+        g: Math.round(baseC.g * 0.45),
+        b: Math.round(baseC.b * 0.45),
+      });
+
+      const isTransparent = transparency > 0;
+      const mat = new THREE.MeshStandardMaterial({
+        color: baseHex,
+        emissive: emHex,
+        emissiveIntensity: 0.35,
+        roughness: 0.45,
+        metalness: 0.30,
+        transparent: isTransparent,
+        opacity: isTransparent ? (1 - transparency) : 1.0,
+        // depthWrite OFF on all symbols so they don't block the Nous /
+        // Sarx text via the depth buffer.  The text's renderOrder still
+        // ensures it draws on top of symbols, while the brick wall (which
+        // does write depth) properly occludes text from camera angles
+        // where the wall is in front.
+        depthWrite: false,
+      });
+
+      const torusGeo = new THREE.TorusGeometry(ringR, tubeR, 12, 36);
+
+      const left = new THREE.Mesh(torusGeo, mat);
+      left.position.x = -ringR + tubeR * 0.4 - sep;
+      left.renderOrder = -1;
+      g.add(left);
+
+      const right = new THREE.Mesh(torusGeo, mat);
+      right.position.x = ringR - tubeR * 0.4 + sep;
+      right.renderOrder = -1;
+      g.add(right);
+
+      return g;
+    }
+
+    // Each symbol's group becomes a billboarded "scale" — we'll
+    // collect them so the render loop can reorient them per frame.
+    const symbolGroups = [];
+
+    // Helper: place a symbol at the given angle (degrees) on the
+    // great circle, with the given gradient parameter for its color.
+    //
+    // Symbols whose angle falls within the Archetypal Self ovoid's
+    // angular footprint (the ovoid sits at world position ~(-0.70, 2.55)
+    // which corresponds to about 105°-135° on the great circle) get
+    // boosted transparency so they appear to fade into the ovoid's
+    // golden interior rather than reading as solid scales overlapping
+    // the ovoid silhouette.
+    function placeSymbol(angleDeg, gradientT) {
+      const a = angleDeg * Math.PI / 180;
+      const px = Math.cos(a) * bandR;
+      const py = Math.sin(a) * bandR;
+      const pz = 0;
+
+      // Detect symbols inside the ovoid's angular range
+      let transparency = 0;
+      if (angleDeg >= 100 && angleDeg <= 140) {
+        const mid = 120;
+        const dist = Math.abs(angleDeg - mid);
+        const range = 20;
+        const k = Math.max(0, 1 - dist / range);
+        transparency = 0.65 * k;
+      }
+
+      // Symbols behind THE INNER PATH tunnel (the cylinder along ±X
+      // at the equator).  Symbols within ±18° of 180° get pushed to
+      // near-fully transparent so the tunnel cleanly occludes them
+      // (the tunnel itself is translucent gold, so even a faint ring
+      // shows through if we don't push hard).
+      if (angleDeg >= 162 && angleDeg <= 198) {
+        const mid = 180;
+        const dist = Math.abs(angleDeg - mid);
+        const range = 18;
+        const k = Math.max(0, 1 - dist / range);
+        transparency = Math.max(transparency, 1.0 * k);
+      }
+
+      // Symbols past 246° begin to separate, ramping up toward the
+      // brick wall base.  Mirrors Troy's diagram where the fused ∞
+      // pairs pull apart at the deepest unconscious — the visual
+      // signature of trauma.
+      let separation = 0;
+      if (angleDeg >= 246) {
+        const k = (angleDeg - 246) / (295 - 246);   // 0..1
+        separation = 0.06 * k;
+      }
+
+      const sym = buildInfinitySymbol(1.0, gradientT, transparency, separation);
+      sym.position.set(px, py, pz);
+      // Rotate so the symbol's long axis (its local X) runs RADIALLY,
+      // pointing through the center of the sphere.
+      sym.rotation.z = a;
+      sym.renderOrder = -1;
+      group.add(sym);
+      symbolGroups.push(sym);
+    }
+
+    // Main arc — 16 symbols sweeping 170° from upper-left around the
+    // back/bottom to lower-east, with gold-to-gray gradient.
+    for (let i = 0; i < symbolCount; i++) {
+      const angleDeg = startDeg + i * stepDeg;
+      const gradientT = i / (symbolCount - 1);
+      placeSymbol(angleDeg, gradientT);
+    }
+
+    // Trauma extension — additional ∞ pairs continuing past the main
+    // arc's endpoint (280°) down to the base of the brick wall (~295°).
+    // These pairs sit in the angular range where Troy draws the
+    // separation most clearly, so their separation parameter ramps
+    // up further as they approach the wall.  Gradient stays at the
+    // dark-gray end of the scale.
+    const traumaStart = 282;
+    const traumaEnd   = 295;
+    const traumaCount = 4;
+    const traumaStep  = (traumaEnd - traumaStart) / (traumaCount - 1);
+    for (let i = 0; i < traumaCount; i++) {
+      const angleDeg = traumaStart + i * traumaStep;
+      placeSymbol(angleDeg, 1.0);
+    }
+
+    // Upper-right fill arc — symbols populating the gap between the
+    // Archetypal Self ovoid and the brick wall, ABOVE the "Upper
+    // Unconscious / NOUS" text.  Angle range 55°-80° puts them at
+    // y ≈ 2.2-2.6, comfortably above the text (which ends around
+    // y ≈ 2.0) and clear of the brick wall (which intersects the
+    // soul boundary around angle 65° lower down — at the higher
+    // y positions on this band, the brick wall has receded).
+    const fillStart = 55;
+    const fillEnd   = 80;
+    const fillCount = 4;
+    const fillStep  = (fillEnd - fillStart) / (fillCount - 1);
+    for (let i = 0; i < fillCount; i++) {
+      const angleDeg = fillStart + i * fillStep;
+      // Bright gold range: 0.0 to 0.15 of the gradient
+      const gradientT = (i / (fillCount - 1)) * 0.15;
+      placeSymbol(angleDeg, gradientT);
+    }
+
+    // Lower-right area: no fill arc.  The main arc ends at 280° which
+    // is the correct stop point just below the brick wall.  Adding
+    // symbols past that would put them behind the brick wall, hidden
+    // from view.
+
+    group.userData.symbolGroups = symbolGroups;
+    return group;
+  }
+
+  refs.archetypeBands = buildArchetypeBands();
+  scene.add(refs.archetypeBands);
+
+  // ====================================================================
+  // TRAUMATIC COMPLEX
+  //
+  // Three small black silhouette figures sitting in the lower-east inner
+  // region of the soul, between the SHADOW/Gender Archetype wedges and
+  // the brick-wall Ego Defenses. From top to bottom:
+  //   1) Critical Parent Parts (Shame & Guilt) — tallest, adult shape
+  //   2) Aggressive self-protective part (Excessive Anger) — medium
+  //   3) Wounded Inner Child (Fear, Sorrow, Unbonded Aloneness) — small
+  //
+  // A leader line runs east from the cluster out past the soul boundary
+  // to a numbered legend painted on a billboarded canvas plane.  All
+  // figures share the lensClipPlane so they stay clear of the lens
+  // cavity if the camera spins around.
+  // ====================================================================
+  function buildTraumaticFigure(opts) {
+    // opts: { headR, bodyW, bodyH, bodyD, totalScale, withGun }
+    // Returns a small group with a head sphere, rectangular body, and
+    // optionally a small gun extending forward from the body.  All
+    // pieces matte black, clipped to the lensClipPlane.
+    const g = new THREE.Group();
+    const mat = new THREE.MeshStandardMaterial({
+      color: 0x080808,
+      roughness: 0.85,
+      metalness: 0.05,
+      clippingPlanes: [lensClipPlane],
+    });
+
+    const head = new THREE.Mesh(
+      new THREE.SphereGeometry(opts.headR, 20, 16),
+      mat
+    );
+    // Body sits below the head, anchored so the figure's feet are at y=0.
+    const body = new THREE.Mesh(
+      new THREE.BoxGeometry(opts.bodyW, opts.bodyH, opts.bodyD),
+      mat
+    );
+    body.position.y = opts.bodyH / 2;
+    head.position.y = opts.bodyH + opts.headR * 0.85;
+
+    g.add(body);
+    g.add(head);
+
+    if (opts.withGun) {
+      // Simple pistol silhouette: a horizontal barrel extending east
+      // from chest height, with a small grip dropping down behind it.
+      // Sized relative to the figure so it reads as a held weapon
+      // rather than dominating the body.
+      const gunMat = new THREE.MeshStandardMaterial({
+        color: 0x050505,
+        roughness: 0.65,
+        metalness: 0.40,
+        clippingPlanes: [lensClipPlane],
+      });
+      const barrelL = opts.bodyW * 1.6;
+      const barrelH = opts.bodyH * 0.10;
+      const barrelD = opts.bodyD * 0.85;
+      const barrel = new THREE.Mesh(
+        new THREE.BoxGeometry(barrelL, barrelH, barrelD),
+        gunMat
+      );
+      // Hand height — roughly two-thirds up the body.
+      const handY = opts.bodyH * 0.62;
+      // Barrel projects east of body (the figure's "front").
+      barrel.position.set(opts.bodyW * 0.55 + barrelL / 2, handY, 0);
+      g.add(barrel);
+
+      const gripL = opts.bodyW * 0.55;
+      const gripH = opts.bodyH * 0.20;
+      const gripD = barrelD;
+      const grip = new THREE.Mesh(
+        new THREE.BoxGeometry(gripL, gripH, gripD),
+        gunMat
+      );
+      // Grip drops below the back end of the barrel.
+      grip.position.set(opts.bodyW * 0.55 + gripL * 0.5, handY - gripH * 0.55, 0);
+      g.add(grip);
+    }
+
+    g.scale.setScalar(opts.totalScale || 1.0);
+    return g;
+  }
+
+  function buildTraumaticComplex() {
+    const group = new THREE.Group();
+
+    // --- Three figures, top → bottom, in a tight vertical cluster on
+    //     the east side of the inner ring. Spacing chosen so the trio
+    //     reads as a family unit, not three separate icons.
+
+    // Critical Parent — tallest adult silhouette.
+    const parent = buildTraumaticFigure({
+      headR: 0.085,
+      bodyW: 0.13,
+      bodyH: 0.34,
+      bodyD: 0.07,
+      totalScale: 1.0,
+    });
+    parent.position.set(1.10, -1.25, 0.10);
+
+    // Aggressive self-protective part — medium, slightly hunched
+    // (achieved by tilting the whole figure forward a touch).
+    const aggressor = buildTraumaticFigure({
+      headR: 0.075,
+      bodyW: 0.115,
+      bodyH: 0.24,
+      bodyD: 0.06,
+      totalScale: 1.0,
+      withGun: true,
+    });
+    aggressor.position.set(1.05, -1.65, -0.05);
+    aggressor.rotation.z = 0.08;  // slight forward lean
+
+    // Wounded Inner Child — small head-prominent figure.
+    const child = buildTraumaticFigure({
+      headR: 0.075,
+      bodyW: 0.085,
+      bodyH: 0.13,
+      bodyD: 0.05,
+      totalScale: 1.0,
+    });
+    child.position.set(0.85, -1.95, 0.05);
+
+    group.add(parent);
+    group.add(aggressor);
+    group.add(child);
+
+    group.userData.figures = { parent, aggressor, child };
+    return group;
+  }
+
+  refs.traumaticComplex = buildTraumaticComplex();
+  scene.add(refs.traumaticComplex);
+
+  // --- SPIRITUAL AXIS ---
+  function buildStarburst() {
+    const group = new THREE.Group();
+
+    // Twinkle-style 4-pointed star: sharp points at the cardinal
+    // directions with concave (inward-curving) Bézier arcs between
+    // them, extruded with a small bevel for 3D depth.  Matches Troy's
+    // hand-drawn diagram where the star has dramatic pointy tips and
+    // pinched-in waists between them.
+    const tip   = 0.42;     // distance from center to each sharp point
+    const waist = 0.06;     // distance from center where the arcs pull inward to
+    const ctrl  = 0.10;     // Bézier control-point distance (smaller = deeper concavity)
+
+    // Build the 2D shape using THREE.Shape with quadratic Bézier curves
+    // for the concave sides between each pair of adjacent points.
+    const shape = new THREE.Shape();
+    shape.moveTo(0, tip);                                  // top point
+
+    // Top → Right side: curve in toward (waist, waist) then out to (tip, 0)
+    shape.quadraticCurveTo(ctrl, ctrl, waist, waist);      // pull inward
+    shape.quadraticCurveTo(ctrl, ctrl, tip, 0);            // out to right point
+
+    // Right → Bottom
+    shape.quadraticCurveTo(ctrl, -ctrl, waist, -waist);
+    shape.quadraticCurveTo(ctrl, -ctrl, 0, -tip);
+
+    // Bottom → Left
+    shape.quadraticCurveTo(-ctrl, -ctrl, -waist, -waist);
+    shape.quadraticCurveTo(-ctrl, -ctrl, -tip, 0);
+
+    // Left → Top
+    shape.quadraticCurveTo(-ctrl, ctrl, -waist, waist);
+    shape.quadraticCurveTo(-ctrl, ctrl, 0, tip);
+
+    // Extrude with a small bevel for 3D depth.  Depth is along local +Z;
+    // bevel rounds the front and back edges so the star catches light.
+    const extrudeSettings = {
+      depth: 0.10,
+      bevelEnabled: true,
+      bevelThickness: 0.025,
+      bevelSize: 0.020,
+      bevelSegments: 4,
+      curveSegments: 16,
+    };
+    const geo = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+    // Center the extrusion depth-wise on the X-Y plane
+    geo.translate(0, 0, -extrudeSettings.depth / 2);
+
+    // Star body — golden bronze with strong emissive glow so it reads
+    // as a luminous symbol of the spiritual realm.
+    const bodyMat = new THREE.MeshStandardMaterial({
+      color: 0xe8a040,
+      emissive: 0xc97020,
+      emissiveIntensity: 0.75,
+      roughness: 0.35,
+      metalness: 0.30,
+      side: THREE.DoubleSide,
+    });
+    group.add(new THREE.Mesh(geo, bodyMat));
+
+    // Outer additive halo — same shape slightly inflated, providing
+    // a glowing aura around the star
+    const haloShape = new THREE.Shape();
+    const tipH   = tip * 1.10;
+    const waistH = waist * 1.10;
+    const ctrlH  = ctrl * 1.10;
+    haloShape.moveTo(0, tipH);
+    haloShape.quadraticCurveTo(ctrlH, ctrlH, waistH, waistH);
+    haloShape.quadraticCurveTo(ctrlH, ctrlH, tipH, 0);
+    haloShape.quadraticCurveTo(ctrlH, -ctrlH, waistH, -waistH);
+    haloShape.quadraticCurveTo(ctrlH, -ctrlH, 0, -tipH);
+    haloShape.quadraticCurveTo(-ctrlH, -ctrlH, -waistH, -waistH);
+    haloShape.quadraticCurveTo(-ctrlH, -ctrlH, -tipH, 0);
+    haloShape.quadraticCurveTo(-ctrlH, ctrlH, -waistH, waistH);
+    haloShape.quadraticCurveTo(-ctrlH, ctrlH, 0, tipH);
+    const haloGeo = new THREE.ShapeGeometry(haloShape);
+    const haloMat = new THREE.MeshBasicMaterial({
+      color: 0xf0c060,
+      transparent: true,
+      opacity: 0.45,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    group.add(new THREE.Mesh(haloGeo, haloMat));
+
+    // Small dark center dot — the eye of the star, matching Troy's drawing
+    const centerGeo = new THREE.SphereGeometry(0.035, 16, 12);
+    const centerMat = new THREE.MeshStandardMaterial({
+      color: 0x6a3d10,
+      emissive: 0x6a3d10,
+      emissiveIntensity: 0.4,
+      roughness: 0.4,
+      metalness: 0.2,
+    });
+    const centerDot = new THREE.Mesh(centerGeo, centerMat);
+    centerDot.position.z = extrudeSettings.depth / 2 + 0.01;
+    group.add(centerDot);
+
+    return group;
+  }
+
+  function buildSpiritualAxis() {
+    const group = new THREE.Group();
+
+    // Cone's apex is at the Still Point (origin) and its wide top now
+    // ends at the bottom edge of the Archetypal Self ovoid — the cone
+    // visually "empties into" the ovoid.  The starburst still sits at
+    // the original far-above-sphere position in the spiritual realm.
+    const apex = new THREE.Vector3(0, 0, 0);
+    const base = new THREE.Vector3(-0.575, 2.10, 0);   // ovoid bottom on cone path
+    // Starburst position: emerging from the hole at the top of the
+    // soul sphere where the cone breaches the boundary.  The star's
+    // center sits just past the hole along the cone direction, and the
+    // star tilts to match the cone's lean — so it reads as "arising
+    // out of the opening" rather than floating somewhere above.
+    const starburstPos = new THREE.Vector3(-0.872, 3.183, 0);
+
+    const direction = new THREE.Vector3().subVectors(base, apex);
+    const length = direction.length();
+    direction.normalize();
+
+    const baseRadius = 0.22;
+
+    const coneGeo = new THREE.ConeGeometry(baseRadius, length, 32, 1, true);
+    coneGeo.translate(0, -length / 2, 0);
+    coneGeo.rotateZ(Math.PI);
+
+    const coneMat = new THREE.MeshStandardMaterial({
+      color: 0xe09838,
+      transparent: true,
+      opacity: 0.26,
+      roughness: 0.4,
+      metalness: 0.15,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    const coneMesh = new THREE.Mesh(coneGeo, coneMat);
+
+    const sheenGeo = new THREE.ConeGeometry(baseRadius + 0.04, length, 32, 1, true);
+    sheenGeo.translate(0, -length / 2, 0);
+    sheenGeo.rotateZ(Math.PI);
+    const sheenMat = new THREE.MeshBasicMaterial({
+      color: 0xc97020,
+      transparent: true,
+      opacity: 0.14,
+      side: THREE.BackSide,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const sheenMesh = new THREE.Mesh(sheenGeo, sheenMat);
+
+    const coneGroup = new THREE.Group();
+    coneGroup.add(coneMesh);
+    coneGroup.add(sheenMesh);
+
+    const yAxis = new THREE.Vector3(0, 1, 0);
+    const q = new THREE.Quaternion().setFromUnitVectors(yAxis, direction);
+    coneGroup.quaternion.copy(q);
+    coneGroup.position.copy(apex);
+
+    group.add(coneGroup);
+
+    const star = buildStarburst();
+    star.position.copy(starburstPos);
+    // Tilt the star so its vertical axis aligns with the cone's
+    // direction — making it look like the star is rising along the
+    // same line as the spiritual axis emerging from the soul opening.
+    star.rotation.z = 15.32 * Math.PI / 180;
+    group.add(star);
+
+    return group;
+  }
+
+  refs.spiritualAxis = buildSpiritualAxis();
+  scene.add(refs.spiritualAxis);
+
+  // --- ARCHETYPAL SELF OVOID ---
+  // Small horizontal ovoid sitting at the top of the soul sphere — wider
+  // than tall, flattened, like a small egg laid on its side at the crown.
+  // The cone of the spiritual axis passes up through it on its way to
+  // the starburst.
+  function buildArchetypalSelfOvoid() {
+    const group = new THREE.Group();
+
+    // Centered on the cone path, positioned at the top of the upper
+    // sphere — bumping up against the inside of the soul boundary.
+    // Cone passes from origin through (-1.0, 3.65, 0); the ovoid
+    // center sits where the cone's path touches near the top of the
+    // sphere interior.
+    const center = new THREE.Vector3(-0.70, 2.55, 0);
+
+    // Tilt the ovoid's long axis to follow the sphere's tangent at its
+    // center point.  The radial from origin to the ovoid center is
+    // ~105° from +X; the tangent (perpendicular) is ~15° from +X.  This
+    // rotation lifts the left end up and dips the right end down,
+    // tucking both edges inside the sphere's curve.
+    const tiltDeg = 15.35;
+    const tiltRad = tiltDeg * Math.PI / 180;
+
+    // All ovoid pieces are built around the local origin, then placed
+    // into a tilt group that rotates them around Z, then the tilt group
+    // is positioned at `center` in world space.
+    const tilted = new THREE.Group();
+    tilted.position.copy(center);
+    tilted.rotation.z = tiltRad;
+
+    // Small ovoid — wider than tall, flattened in depth.
+    const longAxis  = 0.85;   // along local X (horizontal — long axis)
+    const shortAxis = 0.45;   // along local Y (vertical — short)
+    const depthAxis = 0.55;   // along local Z
+
+    // Inner translucent fill — matched to the cone's exact tone
+    const innerGeo = new THREE.SphereGeometry(1.0, 40, 28);
+    const innerMat = new THREE.MeshStandardMaterial({
+      color: 0xe09838,
+      emissive: 0xe09838,
+      emissiveIntensity: 0.20,
+      transparent: true,
+      opacity: 0.32,
+      roughness: 0.4,
+      metalness: 0.15,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    const inner = new THREE.Mesh(innerGeo, innerMat);
+    inner.scale.set(longAxis, shortAxis, depthAxis);
+    tilted.add(inner);
+
+    // Outer additive sheen — soft golden bronze glow matched to cone
+    const sheenGeo = new THREE.SphereGeometry(1.0, 40, 28);
+    const sheenMat = new THREE.MeshBasicMaterial({
+      color: 0xc97020,
+      transparent: true,
+      opacity: 0.22,
+      side: THREE.BackSide,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const sheen = new THREE.Mesh(sheenGeo, sheenMat);
+    sheen.scale.set(longAxis * 1.04, shortAxis * 1.04, depthAxis * 1.04);
+    tilted.add(sheen);
+
+    // Outline ring around the silhouette in the local X-Y plane — clean
+    // drawn edge matching Troy's hand-drawn rendering.
+    const ringGeo = new THREE.BufferGeometry();
+    const ringPts = [];
+    for (let i = 0; i <= 96; i++) {
+      const a = (i / 96) * Math.PI * 2;
+      ringPts.push(new THREE.Vector3(
+        Math.cos(a) * longAxis,
+        Math.sin(a) * shortAxis,
+        0
+      ));
+    }
+    ringGeo.setFromPoints(ringPts);
+    tilted.add(new THREE.Line(ringGeo, new THREE.LineBasicMaterial({
+      color: 0x8a5a18,
+      transparent: true,
+      opacity: 0.85,
+    })));
+
+    group.add(tilted);
+    return group;
+  }
+
+  refs.archetypalOvoid = buildArchetypalSelfOvoid();
+  scene.add(refs.archetypalOvoid);
+
+  // --- TUNNEL ---
+  function buildTunnel() {
+    const tunnel = new THREE.Group();
+
+    const xWest = -3.47;
+    const xEast =  2.05;
+    const length = xEast - xWest;
+    const radius = 0.18;
+
+    const tubeGeo = new THREE.CylinderGeometry(radius, radius, length, 32, 1, true);
+    const tubeMat = new THREE.MeshStandardMaterial({
+      color: 0xeac26a,
+      transparent: true,
+      opacity: 0.45,
+      roughness: 0.4,
+      metalness: 0.15,
+      side: THREE.DoubleSide,
+      depthWrite: true,
+    });
+    const tube = new THREE.Mesh(tubeGeo, tubeMat);
+    tube.rotation.z = Math.PI / 2;
+    tube.position.x = (xWest + xEast) / 2;
+    tunnel.add(tube);
+
+    const sheenGeo = new THREE.CylinderGeometry(radius + 0.05, radius + 0.05, length, 32, 1, true);
+    const sheenMat = new THREE.MeshBasicMaterial({
+      color: 0xf0c060,
+      transparent: true,
+      opacity: 0.45,
+      side: THREE.BackSide,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const sheen = new THREE.Mesh(sheenGeo, sheenMat);
+    sheen.rotation.z = Math.PI / 2;
+    sheen.position.x = (xWest + xEast) / 2;
+    tunnel.add(sheen);
+
+    return tunnel;
+  }
+
+  refs.tunnel = buildTunnel();
+  scene.add(refs.tunnel);
+
+  // --- OPENING TO SPIRITUAL REALM ---
+  // Translucent ovoid at the west end of the Inner Path tunnel — the
+  // place where the tunnel "empties into" the spiritual realm.  The
+  // tunnel's far west tip touches the eastern edge of this ovoid, so
+  // visually the path leads from the soul interior, out through the
+  // soul boundary, and into this opening.
+  // Opening ovoid removed — the "OPENING TO THE SPIRITUAL REALM" text
+  // floats freely west of the soul sphere instead of being enclosed in
+  // a shell.  Cleaner read.
+
+  // --- OPENING TO SPIRITUAL REALM TEXT ---
+  // Three lines of beveled bronze text floating west of the soul sphere,
+  // billboarded to camera so it stays readable from any orbit angle.
+  refs.openingText = new THREE.Group();
+  scene.add(refs.openingText);
+
+  (function buildOpeningText() {
+    const cw = 1024, chh = 512;
+    const c = document.createElement("canvas");
+    c.width = cw; c.height = chh;
+    const x = c.getContext("2d");
+    x.clearRect(0, 0, cw, chh);
+
+    x.textAlign = "center";
+    x.textBaseline = "middle";
+    const fontSize = 100;
+    x.font = "bold " + fontSize + "px Georgia, 'Times New Roman', serif";
+    x.letterSpacing = "5px";
+
+    const lines = ["OPENING", "TO THE", "SPIRITUAL", "REALM"];
+    const lineH = fontSize * 1.05;
+    const cx = cw * 0.5;
+    const cy = chh * 0.5;
+
+    function paintBeveled(text, y) {
+      const depthSteps = 6;
+      for (let i = depthSteps; i >= 1; i--) {
+        const t = i / depthSteps;
+        const offX = i * 0.9;
+        const offY = i * 0.9;
+        const r = Math.round(40  + (122 - 40)  * (1 - t));
+        const g = Math.round(22  + (78  - 22)  * (1 - t));
+        const b = Math.round(8   + (22  - 8)   * (1 - t));
+        x.fillStyle = "rgb(" + r + "," + g + "," + b + ")";
+        x.fillText(text, cx + offX, y + offY);
+      }
+      x.lineWidth = 2.5;
+      x.strokeStyle = "rgba(22, 12, 5, 0.98)";
+      x.strokeText(text, cx, y);
+      x.fillStyle = "#5a3410";
+      x.fillText(text, cx, y);
+      x.fillStyle = "rgba(232, 192, 120, 0.55)";
+      x.fillText(text, cx - 0.9, y - 0.9);
+    }
+
+    for (let i = 0; i < lines.length; i++) {
+      const yOff = (i - (lines.length - 1) / 2) * lineH;
+      paintBeveled(lines[i], cy + yOff);
+    }
+
+    const tex = new THREE.CanvasTexture(c);
+    tex.minFilter = THREE.LinearFilter;
+    tex.magFilter = THREE.LinearFilter;
+
+    const mat = new THREE.MeshBasicMaterial({
+      map: tex,
+      transparent: true,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+
+    // Plane size — fits within the smaller opening ovoid (1.65 tall).
+    // Position at the ovoid center; the closed front hemisphere sits in
+    // front of (toward camera from) the text, so the text reads against
+    // the lit golden front face.
+    const planeH = 1.20;
+    const planeW = planeH * (cw / chh);
+    const plane = new THREE.Mesh(new THREE.PlaneGeometry(planeW, planeH), mat);
+    plane.position.set(-4.30, 0, 0);
+
+    refs.openingText.add(plane);
+    refs.openingTextStack = plane;   // billboarded in render loop
+    applyVisibility();
+  })();
+
+  // --- HIGHER UNCONSCIOUS (NOUS) TEXT ---
+  // Stacked label sitting in the upper hemisphere of the soul sphere,
+  // BEHIND the inner sphere/cone in Z so they occlude parts of it from
+  // the camera angle.  Each line is bent into a horizontal arc (concave
+  // toward the camera, matching the curve of the soul sphere it sits
+  // inside), then the whole stack billboards as one to the camera.
+  refs.nousText = new THREE.Group();
+  scene.add(refs.nousText);
+
+  (function buildNousText() {
+    function buildLetterTexture(ch) {
+      // Bold black sans-serif with soft drop shadow — matches Doug's
+      // target reference style.
+      const cw = 256, chh = 320;
+      const c = document.createElement("canvas");
+      c.width = cw; c.height = chh;
+      const x = c.getContext("2d");
+      x.clearRect(0, 0, cw, chh);
+      x.font = "900 240px 'Arial Black', 'Helvetica', 'Arial', sans-serif";
+      x.textAlign = "center";
+      x.textBaseline = "middle";
+      const tx = cw * 0.5;
+      const ty = chh * 0.5;
+
+      // Soft drop shadow
+      x.shadowColor = "rgba(0, 0, 0, 0.45)";
+      x.shadowBlur  = 10;
+      x.shadowOffsetX = 4;
+      x.shadowOffsetY = 4;
+      x.fillStyle = "#000000";
+      x.fillText(ch, tx, ty);
+      // Reset shadow and paint solid black on top so the letter face
+      // stays crisp (not blurred by its own shadow).
+      x.shadowColor = "rgba(0, 0, 0, 0)";
+      x.shadowBlur  = 0;
+      x.shadowOffsetX = 0;
+      x.shadowOffsetY = 0;
+      x.fillStyle = "#000000";
+      x.fillText(ch, tx, ty);
+
+      const tex = new THREE.CanvasTexture(c);
+      tex.minFilter = THREE.LinearFilter;
+      tex.magFilter = THREE.LinearFilter;
+      return tex;
+    }
+
+    // Build one line of text as letters arrayed along a horizontal arc
+    // in the X-Y plane.  arcRadius controls how curved the line is —
+    // larger = flatter, smaller = more pronounced curve.  Each letter
+    // is rotated in-plane to sit tangent to the arc (top of the letter
+    // points outward radially).
+    //
+    //   text          : line content
+    //   letterH       : letter height in world units
+    //   yOffset       : vertical offset of this line (in the local stack)
+    //   arcRadius     : radius of the arc the letters lie on
+    function buildArcLine(text, letterH, yOffset, arcRadius) {
+      const lineGroup = new THREE.Group();
+      const aspect = 256 / 320;
+      const letterW = letterH * aspect;
+      const letterStep = letterW * 0.78;   // tight letter spacing along arc
+      const angleStep = letterStep / arcRadius;
+
+      const letters = text.split("");
+      const total = letters.length;
+      const startAngle = -angleStep * (total - 1) / 2;
+
+      for (let i = 0; i < total; i++) {
+        const ch = letters[i];
+        if (ch === " ") {
+          continue;
+        }
+        const angle = startAngle + i * angleStep;
+        // Arc curves like ∪ (concave UP / smile shape).  Looking at the
+        // inside of the soul sphere from the camera, text near the top
+        // hugs the dome's interior curve, which from the viewer's
+        // perspective reads as a smile shape opening downward toward
+        // the center of the sphere.  Arc center is BELOW the line.
+        const px = Math.sin(angle) * arcRadius;
+        const py = yOffset + Math.cos(angle) * arcRadius - arcRadius;
+
+        const tex = buildLetterTexture(ch);
+        const mat = new THREE.MeshBasicMaterial({
+          map: tex,
+          transparent: true,
+          depthWrite: false,
+          depthTest: true,
+          side: THREE.DoubleSide,
+        });
+        const plane = new THREE.Mesh(new THREE.PlaneGeometry(letterW, letterH), mat);
+        plane.position.set(px, py, 0);
+        // High renderOrder so text draws after (on top of) the
+        // archetype symbols (which sit at renderOrder = -1).
+        plane.renderOrder = 10;
+        // Each letter rotates so its top points UP (away from arc
+        // center which sits below the line), staying tangent to arc.
+        plane.rotation.z = -angle;
+        lineGroup.add(plane);
+      }
+      return lineGroup;
+    }
+
+    // 4-block quadrant layout:
+    //   UPPER       UNCONSCIOUS    (top row, split left/right)
+    //     or          NOUS         (bottom row, "or" under UPPER's
+    //                               "er", "NOUS" under UNCONSCIOUS's
+    //                               "UNCON")
+    // Each block retains the original arc curvature (concave-up smile)
+    // so all four pieces feel like they belong to the same dome.
+    const stack = new THREE.Group();
+    const tiltGroup = new THREE.Group();
+    stack.add(tiltGroup);
+
+    const letterH = 0.34;
+    const lineGap = letterH * 1.05;
+    const arcR = 1.90;
+
+    function placeBlock(text, xOffset, yOffset, letterH, arcR) {
+      const lineGroup = buildArcLine(text, letterH, 0, arcR);
+      const wrap = new THREE.Group();
+      wrap.add(lineGroup);
+      wrap.position.set(xOffset, yOffset, 0);
+      return wrap;
+    }
+
+    // Top row: UPPER (left quadrant), UNCONSCIOUS (right quadrant).
+    // Bottom row: "or" and "NOUS" — these sit OUTSIDE the tilted
+    // groups so they read straight (un-rotated), placed by eye under
+    // the visual "er" of UPPER and "UNCON" of UNCONSCIOUS after the
+    // top-row blocks have been rotated into place.
+    //
+    // Group the two top blocks separately so each side can be tilted
+    // along the dome's curve: left side CCW, right side CW.  Bottom
+    // row stays straight.
+    const leftSide = new THREE.Group();
+    leftSide.add(placeBlock("HIGHER", -1.60, +lineGap * 2.2, letterH, arcR));
+    leftSide.rotation.z = 36 * Math.PI / 180;   // stronger CCW twist
+    leftSide.scale.setScalar(0.72);   // match right-side scale
+    tiltGroup.add(leftSide);
+
+    const rightSide = new THREE.Group();
+    rightSide.add(placeBlock("UNCONSCIOUS",  +0.85, +lineGap * 1.5, letterH, arcR));
+    rightSide.add(placeBlock("(heart-mind)", +0.85, +lineGap * 0.3, letterH, arcR));
+    rightSide.rotation.z = -20 * Math.PI / 180;   // less CW than before
+    rightSide.scale.setScalar(0.72);   // shrink so UNCONSCIOUS fits between GLORY and brick wall
+    tiltGroup.add(rightSide);
+
+    // Bottom row — each block placed under the visual end of its
+    // top-row word.  "or" sits below the rotated UPPER (under "er");
+    // "NOUS" sits below the rotated UNCONSCIOUS (under "UNC") and
+    // gets its own CW tilt so it reads as part of the same sweep.
+    // Bottom row — "or NOUS" sits beneath HIGHER on the left.
+    // "(heart-mind)" lives inside the rightSide group so it sits
+    // centered under UNCONSCIOUS, sharing its arc curve and CW tilt.
+    const orBlock = placeBlock("or NOUS", -1.10, -0.60, letterH, arcR);
+    orBlock.rotation.z = 42 * Math.PI / 180;   // CCW tilt, slightly more than HIGHER
+    orBlock.scale.setScalar(0.72);
+    tiltGroup.add(orBlock);
+
+    // No additional global tilt.
+    tiltGroup.rotation.z = 0;
+
+    // Raised higher into the upper hemisphere so the four blocks
+    // spread across the dome rather than crowding the center.
+    stack.position.set(0, 1.80, 0);
+
+    refs.nousText.add(stack);
+    refs.nousTextStack = stack;   // billboarded in render loop
+    applyVisibility();
+  })();
+
+  // --- LOWER UNCONSCIOUS (SARX) TEXT ---
+  // Arc-curved label in the lower hemisphere, smile-shaped (concave up)
+  // matching the curve of the soul sphere's interior at the bottom.
+  refs.sarxText = new THREE.Group();
+  scene.add(refs.sarxText);
+
+  (function buildSarxText() {
+    function buildLetterTexture(ch) {
+      const cw = 256, chh = 320;
+      const c = document.createElement("canvas");
+      c.width = cw; c.height = chh;
+      const x = c.getContext("2d");
+      x.clearRect(0, 0, cw, chh);
+      x.font = "900 240px 'Arial Black', 'Helvetica', 'Arial', sans-serif";
+      x.textAlign = "center";
+      x.textBaseline = "middle";
+      const tx = cw * 0.5;
+      const ty = chh * 0.5;
+
+      x.shadowColor = "rgba(0, 0, 0, 0.45)";
+      x.shadowBlur  = 10;
+      x.shadowOffsetX = 4;
+      x.shadowOffsetY = 4;
+      x.fillStyle = "#000000";
+      x.fillText(ch, tx, ty);
+      x.shadowColor = "rgba(0, 0, 0, 0)";
+      x.shadowBlur  = 0;
+      x.shadowOffsetX = 0;
+      x.shadowOffsetY = 0;
+      x.fillStyle = "#000000";
+      x.fillText(ch, tx, ty);
+
+      const tex = new THREE.CanvasTexture(c);
+      tex.minFilter = THREE.LinearFilter;
+      tex.magFilter = THREE.LinearFilter;
+      return tex;
+    }
+
+    function buildArcLine(text, letterH, yOffset, arcRadius) {
+      const lineGroup = new THREE.Group();
+      const aspect = 256 / 320;
+      const letterW = letterH * aspect;
+      const letterStep = letterW * 0.78;
+      const angleStep = letterStep / arcRadius;
+
+      const letters = text.split("");
+      const total = letters.length;
+      const startAngle = -angleStep * (total - 1) / 2;
+
+      for (let i = 0; i < total; i++) {
+        const ch = letters[i];
+        if (ch === " ") {
+          continue;
+        }
+        const angle = startAngle + i * angleStep;
+        // True smile-shape arc (∪, concave UP): apex at center letter,
+        // letters at the ends rise UP relative to center.  Arc center
+        // sits ABOVE the line at (0, yOffset + arcRadius).
+        const px = Math.sin(angle) * arcRadius;
+        const py = yOffset - Math.cos(angle) * arcRadius + arcRadius;
+
+        const tex = buildLetterTexture(ch);
+        const mat = new THREE.MeshBasicMaterial({
+          map: tex,
+          transparent: true,
+          depthWrite: false,
+          depthTest: true,
+          side: THREE.DoubleSide,
+        });
+        const plane = new THREE.Mesh(new THREE.PlaneGeometry(letterW, letterH), mat);
+        plane.position.set(px, py, 0);
+        plane.renderOrder = 10;
+        // Rotate each letter so its top points UP (away from arc center
+        // which is above the line) — letters stay tangent to arc.
+        plane.rotation.z = angle;
+        lineGroup.add(plane);
+      }
+      return lineGroup;
+    }
+
+    const stack = new THREE.Group();
+    const tiltGroup = new THREE.Group();
+    stack.add(tiltGroup);
+
+    const letterH = 0.24;
+    const arcR = 1.55;
+
+    // ONE LONG LINE: "LOWER UNCONSCIOUS" starting near the inner-path
+    // tunnel on the west and sweeping rightward.  The line arcs along
+    // the dome (concave-up smile when viewed from above).  Then
+    // "or SARX" sits centered under it.
+    //
+    // Wrap each line in a translated group so we can offset the whole
+    // text leftward (buildArcLine centers horizontally around x=0).
+    const midX = -0.55;   // line center; left edge sits near tunnel
+
+    const line1 = new THREE.Group();
+    line1.add(buildArcLine("LOWER UNCONSCIOUS", letterH, 0, arcR));
+    line1.position.set(midX, +0.10, 0);
+    line1.rotation.z = -15 * Math.PI / 180;   // CW tilt
+    tiltGroup.add(line1);
+
+    const line2 = new THREE.Group();
+    line2.add(buildArcLine("or SARX", letterH, 0, arcR));
+    line2.position.set(midX, -0.32, 0);
+    line2.rotation.z = -15 * Math.PI / 180;   // CW tilt matching LOWER UNCONSCIOUS
+    tiltGroup.add(line2);
+
+    // Slight CW twist (right side dips down, left lifts up).
+    tiltGroup.rotation.z = -8 * Math.PI / 180;
+
+    // Lower hemisphere placement, mirroring NOUS at top.
+    stack.position.set(0, -1.80, 0);
+
+    refs.sarxText.add(stack);
+    refs.sarxTextStack = stack;   // billboarded in render loop
+    applyVisibility();
+  })();
+
+  // --- EGO LENS ---
+  // Brick wall porosity (0 = solid, 1 = very porous).  Controlled by
+  // a slider in the Scene Controls panel.  At 0 every brick draws
+  // solid; as porosity rises, an increasing fraction of bricks are
+  // rendered as transparent gaps so the wall reads as semi-permeable
+  // (clinically optimal) and eventually as too-fragmented.
+  let brickPorosity = 0.5;
+
+  function makeBrickTexture(porosity) {
+    const p = porosity == null ? brickPorosity : porosity;
+    const canvas = document.createElement("canvas");
+    canvas.width = 256; canvas.height = 256;
+    const ctx = canvas.getContext("2d");
+
+    // Background fill — at porosity 0 this is the dark mortar color
+    // (never seen except in mortar lines).  At higher porosity it
+    // becomes the visible "behind" through the missing bricks, so we
+    // make it transparent so the geometry actually shows through.
+    ctx.clearRect(0, 0, 256, 256);
+    ctx.fillStyle = "#3a2e22";
+    ctx.fillRect(0, 0, 256, 256);
+
+    const brickW = 48, brickH = 22;
+    const mortar = 3;
+    const baseColors = ["#a87858", "#9a6c4e", "#b88560", "#9a6948", "#ad7a55"];
+
+    // Deterministic pseudo-random per-brick: same brick is "missing"
+    // for the same porosity level, so the texture doesn't flicker.
+    function brickHash(row, col) {
+      const x = (row * 73856093) ^ (col * 19349663);
+      return ((x >>> 0) % 10000) / 10000;
+    }
+
+    let yOffset = 0;
+    let row = 0;
+    for (; yOffset < 256; row++) {
+      const xShift = (row % 2 === 0) ? 0 : -brickW / 2;
+      let col = 0;
+      for (let xOffset = xShift; xOffset < 256; xOffset += brickW, col++) {
+        const r = brickHash(row, col);
+        if (r < p) {
+          // Missing brick — leave as transparent gap.  Clear the
+          // mortar background under this brick too.
+          ctx.clearRect(
+            xOffset + mortar, yOffset + mortar,
+            brickW - mortar * 2, brickH - mortar * 2
+          );
+          continue;
+        }
+        const c = baseColors[(row * 7 + col * 3) % baseColors.length];
+        ctx.fillStyle = c;
+        ctx.fillRect(
+          xOffset + mortar, yOffset + mortar,
+          brickW - mortar * 2, brickH - mortar * 2
+        );
+      }
+      yOffset += brickH;
+    }
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(3, 3);
+    return tex;
+  }
+
+  function buildEgoLens() {
+    const group = new THREE.Group();
+
+    const rimR  = 2.2;
+    const xMid  = 2.00;
+    const xEast = 3.00;
+    const xWest = 1.50;
+
+    function buildCap(apexX, direction, capColor, holePhi) {
+      const h = Math.abs(apexX - xMid);
+      const R = (rimR * rimR + h * h) / (2 * h);
+      const centerX = apexX - direction * R;
+
+      const phiCap = Math.acos((R - h) / R);
+
+      const phiInner = holePhi || 0;
+      const phiOuter = phiCap;
+
+      const geo = new THREE.SphereGeometry(
+        R, 48, 32,
+        0, Math.PI * 2,
+        phiInner, phiOuter - phiInner
+      );
+      const mesh = new THREE.Mesh(geo, capColor);
+      if (direction === +1) {
+        mesh.rotation.z = -Math.PI / 2;
+      } else {
+        mesh.rotation.z =  Math.PI / 2;
+      }
+      mesh.position.x = centerX;
+      return mesh;
+    }
+
+    const lensMat = new THREE.MeshStandardMaterial({
+      color: 0xc8b896,
+      transparent: true,
+      opacity: 0.0,
+      roughness: 0.18,
+      metalness: 0.15,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+
+    const brickTex = makeBrickTexture();
+    const brickMat = new THREE.MeshStandardMaterial({
+      map: brickTex,
+      roughness: 0.85,
+      metalness: 0.05,
+      side: THREE.DoubleSide,
+      transparent: true,
+      alphaTest: 0.05,
+    });
+    // Keep refs so the porosity slider can regenerate the texture
+    // and swap it in without rebuilding the lens.
+    refs.brickMat = brickMat;
+
+    group.add(buildCap(xEast, +1, lensMat));
+
+    function buildCapGlow(apexX, direction, color, opacity, scale) {
+      const h = Math.abs(apexX - xMid);
+      const R = (rimR * rimR + h * h) / (2 * h);
+      const phiCap = Math.acos((R - h) / R);
+      const geo = new THREE.SphereGeometry(
+        R * scale, 48, 32,
+        0, Math.PI * 2,
+        0, phiCap
+      );
+      const mat = new THREE.MeshBasicMaterial({
+        color: color,
+        transparent: true,
+        opacity: opacity,
+        side: THREE.BackSide,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      if (direction === +1) {
+        mesh.rotation.z = -Math.PI / 2;
+      } else {
+        mesh.rotation.z =  Math.PI / 2;
+      }
+      mesh.position.x = apexX - direction * R * scale;
+      return mesh;
+    }
+    group.add(buildCapGlow(xEast, +1, 0x8a5a18, 0.45, 1.012));
+
+    const tunnelHoleR = 0.24;
+    const brickH      = Math.abs(xWest - xMid);
+    const brickR      = (rimR * rimR + brickH * brickH) / (2 * brickH);
+    const brickHolePhi = Math.asin(tunnelHoleR / brickR);
+    group.add(buildCap(xWest, -1, brickMat, brickHolePhi));
+
+    const rimGeo = new THREE.BufferGeometry();
+    const rimPts = [];
+    for (let i = 0; i <= 64; i++) {
+      const a = (i / 64) * Math.PI * 2;
+      rimPts.push(new THREE.Vector3(xMid, Math.cos(a) * rimR, Math.sin(a) * rimR));
+    }
+    rimGeo.setFromPoints(rimPts);
+    group.add(new THREE.Line(rimGeo, new THREE.LineBasicMaterial({
+      color: 0x6a3d10, transparent: true, opacity: 0.95,
+    })));
+
+    return group;
+  }
+
+  refs.egoLens = buildEgoLens();
+  scene.add(refs.egoLens);
+
+  // --- BODY ---
+  function makeHatchTexture() {
+    const canvas = document.createElement("canvas");
+    canvas.width = 128; canvas.height = 128;
+    const ctx = canvas.getContext("2d");
+
+    ctx.fillStyle = "#c8a070";
+    ctx.fillRect(0, 0, 128, 128);
+
+    ctx.strokeStyle = "#7a5028";
+    ctx.lineWidth = 2;
+    for (let i = -128; i < 256; i += 12) {
+      ctx.beginPath();
+      ctx.moveTo(i, 0);
+      ctx.lineTo(i + 128, 128);
+      ctx.stroke();
+    }
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    return tex;
+  }
+
+  function buildBody() {
+    const group = new THREE.Group();
+
+    const lensCenterX = 0.08;
+    const lensR       = 2.92;
+    const bodyR       = lensR + 0.12;
+    const phiCap      = Math.PI * 0.10;
+
+    const geo = new THREE.SphereGeometry(
+      bodyR, 24, 16,
+      0, Math.PI * 2,
+      0, phiCap
+    );
+    geo.rotateZ(-Math.PI / 2);
+    geo.translate(lensCenterX, 0, 0);
+
+    const hatchTex = makeHatchTexture();
+    hatchTex.repeat.set(1.4, 1.0);
+
+    const mat = new THREE.MeshStandardMaterial({
+      map: hatchTex,
+      transparent: true,
+      opacity: 0.78,
+      roughness: 0.6,
+      metalness: 0.05,
+      side: THREE.DoubleSide,
+    });
+    group.add(new THREE.Mesh(geo, mat));
+
+    return group;
+  }
+
+  refs.body = buildBody();
+  scene.add(refs.body);
+
+  // --- EGO DEFENSES INSCRIPTION ---
+  (function buildEgoDefensesInscription() {
+    const group = new THREE.Group();
+
+    const sphereCx = 6.59;
+    const sphereR  = 5.09;
+    const standoff = 0.04;
+
+    function buildLetterTexture(ch) {
+      const c = document.createElement("canvas");
+      c.width  = 200; c.height = 240;
+      const x = c.getContext("2d");
+      x.clearRect(0, 0, c.width, c.height);
+      // Heavy bold serif for chunky letterforms with thicker strokes
+      x.font = "900 170px Georgia, 'Times New Roman', serif";
+      x.textAlign = "center";
+      x.textBaseline = "middle";
+      const cx = c.width / 2;
+      const cy = c.height / 2;
+
+      // Carved-into-brick effect with real depth.  Multi-layer paint:
+      //   (1) Multiple darker shadow copies offset progressively
+      //       down-right inside the recess, each darker than the
+      //       last — simulates the shadow falling inside the deep cut
+      //       where the letter is pressed into the wall.
+      //   (2) Pure black letter face on top — the bottom of the recess.
+      //   (3) Thin warm highlight along the upper-left edge — light
+      //       catching the lip where the brick meets the cut.
+
+      // (1) Layered inner-shadow stack — builds visual depth into the cut
+      const depthSteps = 5;
+      for (let i = depthSteps; i >= 1; i--) {
+        const t = i / depthSteps;
+        const offX = i * 1.5;
+        const offY = i * 1.5;
+        // Inner shadow color: very dark gray-black, deeper at the back
+        const v = Math.round(0 + (35 - 0) * (1 - t));   // 0..35 depending on layer
+        x.shadowColor   = "rgba(0, 0, 0, 0.85)";
+        x.shadowBlur    = 5;
+        x.shadowOffsetX = 1.5;
+        x.shadowOffsetY = 1.5;
+        x.fillStyle     = "rgb(" + v + "," + v + "," + v + ")";
+        x.fillText(ch, cx + offX, cy + offY);
+      }
+
+      // Reset shadow for clean front face
+      x.shadowColor   = "rgba(0, 0, 0, 0)";
+      x.shadowBlur    = 0;
+      x.shadowOffsetX = 0;
+      x.shadowOffsetY = 0;
+
+      // (2) Solid black face — the bottom of the recess.  Slightly
+      // thicker outline so the silhouette reads strongly against the
+      // brick texture behind.
+      x.lineWidth   = 2.5;
+      x.strokeStyle = "rgba(0, 0, 0, 1)";
+      x.strokeText(ch, cx, cy);
+      x.fillStyle = "#000000";
+      x.fillText(ch, cx, cy);
+
+      // (3) Upper-left rim highlight — warm cream catching the lip
+      // of the cut where light grazes the brick edge.
+      x.lineWidth = 1.5;
+      x.strokeStyle = "rgba(225, 200, 150, 0.75)";
+      x.strokeText(ch, cx - 1.5, cy - 1.5);
+
+      const t = new THREE.CanvasTexture(c);
+      t.minFilter = THREE.LinearFilter;
+      t.magFilter = THREE.LinearFilter;
+      return t;
+    }
+
+    const text = "Ego Defenses";
+    const letters = text.split("");
+    const totalSlots = letters.length;
+
+    const letterArc = 0.45;
+
+    const letterW = 0.60;
+    const letterH = letterW * (200 / 160);
+
+    const sphereR_brick = sphereR;
+    const phiCap = Math.acos(4.59 / 5.09);
+    const thetaApex = phiCap * 0.78;
+    const smallCircleR = sphereR_brick * Math.sin(thetaApex);
+    const azStep = letterArc / smallCircleR;
+    const azStart = -azStep * (totalSlots - 1) / 2;
+
+    const apex = new THREE.Vector3(1.50, 0, 0);
+    const sphereCenter = new THREE.Vector3(sphereCx, 0, 0);
+    const apexAxis = apex.clone().sub(sphereCenter).normalize();
+    const basisUp = new THREE.Vector3(0, 1, 0);
+    const basisRight = new THREE.Vector3(0, 0, 1);
+
+    for (let i = 0; i < totalSlots; i++) {
+      const ch = letters[i];
+      if (ch === " ") continue;
+
+      const extraOffset = (i === 0) ? -azStep * 0.30 : 0;
+      const phi_az = azStart + i * azStep + extraOffset;
+      const radial = apexAxis.clone().multiplyScalar(Math.cos(thetaApex))
+        .add(basisUp.clone().multiplyScalar(Math.sin(thetaApex) * Math.cos(phi_az)))
+        .add(basisRight.clone().multiplyScalar(Math.sin(thetaApex) * Math.sin(phi_az)));
+      const surfPoint = sphereCenter.clone().add(radial.clone().multiplyScalar(sphereR_brick));
+
+      const normal = radial.clone().normalize();
+
+      const lp = surfPoint.clone().add(normal.clone().multiplyScalar(standoff));
+
+      const tex = buildLetterTexture(ch);
+      const mat = new THREE.MeshBasicMaterial({
+        map: tex,
+        transparent: true,
+        depthWrite: false,
+        side: THREE.FrontSide,
+      });
+      const plane = new THREE.Mesh(new THREE.PlaneGeometry(letterW, letterH), mat);
+      plane.position.copy(lp);
+
+      const flatNormal = new THREE.Vector3(normal.x, 0, normal.z).normalize();
+      const lookTarget = lp.clone().add(flatNormal);
+      plane.lookAt(lookTarget);
+
+      group.add(plane);
+    }
+
+    refs.egoDefensesInscription = group;
+    scene.add(group);
+    applyVisibility();
+  })();
+
+  // --- EGO TEXT ---
+  refs.egoText = new THREE.Group();
+  scene.add(refs.egoText);
+
+  (function buildEgoText() {
+    const blackMat = new THREE.MeshStandardMaterial({
+      color: 0x000000,
+      roughness: 0.55,
+      metalness: 0.1,
+    });
+
+    const h = 0.30;
+    const w = 0.22;
+    const t = 0.045;
+    const d = 0.06;
+
+    function buildE() {
+      const g = new THREE.Group();
+      const eh = w;
+      g.add(makeBox(t, eh, d, -w/2 + t/2, 0, 0));
+      g.add(makeBox(w,         t, d, 0, eh/2 - t/2, 0));
+      g.add(makeBox(w * 0.85,  t, d, -w/2 + (w * 0.85)/2, 0, 0));
+      g.add(makeBox(w,         t, d, 0, -eh/2 + t/2, 0));
+      return g;
+    }
+
+    function buildG() {
+      const g = new THREE.Group();
+      const r = w / 2;
+      const tube = t / 2;
+
+      const sweep      = Math.PI * 1.5;
+      const startAngle = Math.PI * 0.25;
+      const torus = new THREE.Mesh(
+        new THREE.TorusGeometry(r, tube, 8, 36, sweep),
+        blackMat
+      );
+      torus.rotation.z = startAngle;
+      g.add(torus);
+
+      const shelfY    = r * 0.05;
+      const shelfLen  = w * 0.55;
+      const shelfRightX = r - tube;
+      const shelfX    = shelfRightX - shelfLen / 2;
+      g.add(makeBox(shelfLen, t, d, shelfX, shelfY, 0));
+
+      const lowerArcEndY = -r * Math.sin(Math.PI * 0.25);
+      const hookX        = shelfRightX - t / 2;
+      const hookTopY     = shelfY - t / 2;
+      const hookBotY     = lowerArcEndY + tube;
+      const hookH        = hookTopY - hookBotY;
+      const hookCenterY  = (hookTopY + hookBotY) / 2;
+      g.add(makeBox(t, hookH, d, hookX, hookCenterY, 0));
+
+      return g;
+    }
+
+    function buildO() {
+      const g = new THREE.Group();
+      g.add(new THREE.Mesh(
+        new THREE.TorusGeometry(w/2, t/2, 8, 32),
+        blackMat
+      ));
+      return g;
+    }
+
+    function makeBox(bw, bh, bd, x, y, z) {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(bw, bh, bd), blackMat);
+      m.position.set(x, y, z);
+      return m;
+    }
+
+    const E = buildE();
+    const G = buildG();
+    const O = buildO();
+
+    const xStart = 2.10;
+    const spacing = w + 0.07;
+    const xE = xStart;
+    const xG = xStart + spacing;
+    const xO = xStart + spacing * 2;
+    const xMid = (xE + xO) / 2;
+    E.position.set(xE - xMid, 0, 0);
+    G.position.set(xG - xMid, 0, 0);
+    O.position.set(xO - xMid, 0, 0);
+
+    const lettersGroup = new THREE.Group();
+    lettersGroup.add(E);
+    lettersGroup.add(G);
+    lettersGroup.add(O);
+
+    lettersGroup.position.set(xMid, 0.85, 0);
+
+    refs.egoText.add(lettersGroup);
+    refs.egoTextStack = lettersGroup;
+    applyVisibility();
+  })();
+
+  // --- INNER PATH 3D TEXT ---
+  // "THE INNER PATH" rendered as a beveled dark-bronze inscription on a
+  // textured plane inside the inner-path tunnel.  The plane sits at the
+  // tunnel's center axis, oriented to face the camera (+Z), with its
+  // length aligned to the tunnel's east-west axis.  Faux 3D bevel is
+  // achieved by layered canvas painting in graduated bronze tones —
+  // matches the style of the surface-baked wedge labels but in a bronze
+  // palette to read as "made of the tunnel itself."
+  refs.innerPathText = new THREE.Group();
+  scene.add(refs.innerPathText);
+
+  (function buildInnerPathText() {
+    // Tunnel runs along ±X with radius ~0.18.  Plane is sized to fit
+    // comfortably inside (height = ~0.20, width = ~2.0 along the tunnel).
+    const planeW = 2.0;
+    const planeH = 0.22;
+
+    // Build the canvas texture with beveled dark-bronze text
+    const canvasW = 2048;     // wide canvas for sharp text along the long axis
+    const canvasH = 224;      // proportional to plane aspect
+    const canvas = document.createElement("canvas");
+    canvas.width = canvasW; canvas.height = canvasH;
+    const ctx = canvas.getContext("2d");
+
+    // Fully transparent background — only the text shows
+    ctx.clearRect(0, 0, canvasW, canvasH);
+
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    const fontSize = 150;
+    ctx.font = "bold " + fontSize + "px Georgia, 'Times New Roman', serif";
+    ctx.letterSpacing = "8px";
+
+    const text = "THE INNER PATH";
+    const tx = canvasW * 0.5;
+    const ty = canvasH * 0.5;
+
+    // Beveled paint pass with dark bronze palette.  Side-wall layers
+    // build up from very dark bronze at the back to a slightly lighter
+    // bronze at the front edge, then a darker bronze "front face" with
+    // a thin highlight glint on top.
+    const depthSteps = 7;
+    for (let i = depthSteps; i >= 1; i--) {
+      const t = i / depthSteps;
+      const offX = i * 0.9;
+      const offY = i * 0.9;
+      // Bronze gradient from very dark (back) to medium-dark (front edge)
+      const r = Math.round(40 + (110 - 40) * (1 - t));
+      const g = Math.round(20 + (65  - 20) * (1 - t));
+      const b = Math.round(10 + (28  - 10) * (1 - t));
+      ctx.fillStyle = "rgb(" + r + "," + g + "," + b + ")";
+      ctx.fillText(text, tx + offX, ty + offY);
+    }
+    // Front face: very dark bronze with a thick near-black outline so
+    // the text reads clearly against the translucent gold tunnel.
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = "rgba(10, 5, 2, 1.0)";
+    ctx.strokeText(text, tx, ty);
+    ctx.fillStyle = "#2a1808";          // very dark warm-brown front face
+    ctx.fillText(text, tx, ty);
+    // No cream highlight — it washed the text out against the gold tunnel.
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.minFilter = THREE.LinearFilter;
+    tex.magFilter = THREE.LinearFilter;
+    tex.wrapS = THREE.ClampToEdgeWrapping;
+    tex.wrapT = THREE.ClampToEdgeWrapping;
+
+    const mat = new THREE.MeshStandardMaterial({
+      map: tex,
+      transparent: true,
+      side: THREE.DoubleSide,
+      roughness: 0.55,
+      metalness: 0.25,
+      depthWrite: true,
+    });
+
+    const plane = new THREE.Mesh(
+      new THREE.PlaneGeometry(planeW, planeH),
+      mat
+    );
+    // Plane lies in the X-Y plane (faces +Z toward the default camera),
+    // centered at origin which sits inside the tunnel.  The tunnel's
+    // central axis is the X axis; we sit the plane at y=0, z=0 so it's
+    // suspended along the tunnel's center.
+    plane.position.set(-1.7, 0, 0);   // shifted west into the visible tunnel run
+    refs.innerPathText.add(plane);
+
+    applyVisibility();
+  })();
+
+  // --- GLORY TEXT (stacked vertically inside the spiritual axis cone) ---
+  // Each letter is a beveled-canvas plane, sized to fit inside the cone
+  // at its narrowing diameter.  The column is oriented along the cone's
+  // central axis (from apex at origin toward base at the ovoid bottom).
+  // Letters billboard to face the camera so they read clearly from any
+  // orbit angle.
+  refs.gloryText = new THREE.Group();
+  scene.add(refs.gloryText);
+
+  (function buildGloryText() {
+    function makeLetterPlane(ch, height) {
+      // Beveled bronze canvas — same palette as THE INNER PATH text
+      const cw = 256, chh = 320;
+      const c = document.createElement("canvas");
+      c.width = cw; c.height = chh;
+      const x = c.getContext("2d");
+      x.clearRect(0, 0, cw, chh);
+      x.font = "bold 240px Georgia, 'Times New Roman', serif";
+      x.textAlign = "center";
+      x.textBaseline = "middle";
+      const tx = cw * 0.5;
+      const ty = chh * 0.5;
+
+      const depthSteps = 8;
+      for (let i = depthSteps; i >= 1; i--) {
+        const t = i / depthSteps;
+        const offX = i * 1.1;
+        const offY = i * 1.1;
+        const r = Math.round(40  + (122 - 40)  * (1 - t));
+        const g = Math.round(22  + (78  - 22)  * (1 - t));
+        const b = Math.round(8   + (22  - 8)   * (1 - t));
+        x.fillStyle = "rgb(" + r + "," + g + "," + b + ")";
+        x.fillText(ch, tx + offX, ty + offY);
+      }
+      x.lineWidth = 4;
+      x.strokeStyle = "rgba(22, 12, 5, 0.98)";
+      x.strokeText(ch, tx, ty);
+      x.fillStyle = "#5a3410";
+      x.fillText(ch, tx, ty);
+      x.fillStyle = "rgba(232, 192, 120, 0.55)";
+      x.fillText(ch, tx - 1.0, ty - 1.0);
+
+      const tex = new THREE.CanvasTexture(c);
+      tex.minFilter = THREE.LinearFilter;
+      tex.magFilter = THREE.LinearFilter;
+
+      const mat = new THREE.MeshBasicMaterial({
+        map: tex,
+        transparent: true,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      });
+      const aspect = cw / chh;
+      const plane = new THREE.Mesh(
+        new THREE.PlaneGeometry(height * aspect, height),
+        mat
+      );
+      return plane;
+    }
+
+    // Cone path: apex (0,0,0) → base (-0.575, 2.10, 0).  GLORY runs
+    // top-down along that axis: G at the top (near base), Y at the
+    // bottom (near apex / Still Point).
+    const apex = new THREE.Vector3(0, 0, 0);
+    const base = new THREE.Vector3(-0.575, 2.10, 0);
+    const dir  = new THREE.Vector3().subVectors(base, apex);
+    const totalLen = dir.length();
+    dir.normalize();
+
+    const letters = "GLORY".split("");
+    const N = letters.length;
+
+    // Letters span a tighter range along the cone's length, with the
+    // bottom letter (Y) ending well above the Still Point so it stays
+    // visible.  G near the top (close to ovoid bottom), Y in the wider
+    // part of the cone where it has visual breathing room.
+    const startT = 0.92;     // G near top (close to base)
+    const endT   = 0.55;     // Y in the wider mid-cone region
+    const letterH = 0.22;    // letter height in world units
+
+    const stack = new THREE.Group();
+    for (let i = 0; i < N; i++) {
+      const t = startT + (endT - startT) * (i / (N - 1));
+      const pos = apex.clone().add(dir.clone().multiplyScalar(totalLen * t));
+      const letter = makeLetterPlane(letters[i], letterH);
+      letter.position.copy(pos);
+      stack.add(letter);
+    }
+
+    refs.gloryText.add(stack);
+    refs.gloryTextStack = stack;   // billboarded in render loop
+    applyVisibility();
+  })();
+
+  // --- HUMAN SPIRIT ARCHETYPE TEXT (3 lines inside the ovoid) ---
+  // Three stacked lines of beveled bronze text, centered inside the
+  // ovoid at (-0.70, 2.55, 0).  Single billboarded plane carrying all
+  // three lines as a baked canvas image — simplest path to crisp,
+  // readable text inside a small region.
+  refs.humanSpiritText = new THREE.Group();
+  scene.add(refs.humanSpiritText);
+
+  (function buildHumanSpiritText() {
+    const cw = 1024, chh = 512;
+    const c = document.createElement("canvas");
+    c.width = cw; c.height = chh;
+    const x = c.getContext("2d");
+    x.clearRect(0, 0, cw, chh);
+
+    x.textAlign = "center";
+    x.textBaseline = "middle";
+    const fontSize = 92;
+    x.font = "bold " + fontSize + "px Georgia, 'Times New Roman', serif";
+    x.letterSpacing = "3px";
+
+    const lines = ["ARCHETYPAL SELF", "HUMAN SPIRIT"];
+    const lineH = fontSize * 1.18;
+    const cx = cw * 0.5;
+    const cy = chh * 0.5;
+
+    function paintBeveled(text, y) {
+      // High-contrast palette: near-black front face and thick dark
+      // outline so the text reads cleanly against the bright golden
+      // ovoid background.
+      const depthSteps = 7;
+      for (let i = depthSteps; i >= 1; i--) {
+        const t = i / depthSteps;
+        const offX = i * 1.0;
+        const offY = i * 1.0;
+        const r = Math.round(8   + (50  - 8)   * (1 - t));
+        const g = Math.round(4   + (25  - 4)   * (1 - t));
+        const b = Math.round(2   + (8   - 2)   * (1 - t));
+        x.fillStyle = "rgb(" + r + "," + g + "," + b + ")";
+        x.fillText(text, cx + offX, y + offY);
+      }
+      // Very thick near-black outline for maximum contrast
+      x.lineWidth = 7;
+      x.strokeStyle = "rgba(5, 2, 1, 1.0)";
+      x.strokeText(text, cx, y);
+      // Front face: near-black with the faintest warm-brown undertone
+      x.fillStyle = "#0a0502";
+      x.fillText(text, cx, y);
+    }
+
+    for (let i = 0; i < lines.length; i++) {
+      const yOff = (i - (lines.length - 1) / 2) * lineH;
+      paintBeveled(lines[i], cy + yOff);
+    }
+
+    const tex = new THREE.CanvasTexture(c);
+    tex.minFilter = THREE.LinearFilter;
+    tex.magFilter = THREE.LinearFilter;
+
+    const mat = new THREE.MeshBasicMaterial({
+      map: tex,
+      transparent: true,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+
+    // Plane size — bigger to match the larger letters.
+    const planeW = 1.15;
+    const planeH = planeW * (chh / cw);
+    const plane = new THREE.Mesh(new THREE.PlaneGeometry(planeW, planeH), mat);
+    plane.position.set(-0.70, 2.55, 0);   // ovoid center
+
+    refs.humanSpiritText.add(plane);
+    refs.humanSpiritTextStack = plane;   // billboarded in render loop
+    applyVisibility();
+  })();
+
+  // --- WILL TEXT ---
+  refs.willText = new THREE.Group();
+  scene.add(refs.willText);
+
+  (function buildWillText() {
+    const blackMat = new THREE.MeshStandardMaterial({
+      color: 0x000000,
+      roughness: 0.55,
+      metalness: 0.1,
+    });
+
+    const baseW = 0.30;
+    const baseH = 0.30;
+    const baseT = 0.05;
+    const baseD = 0.06;
+
+    function makeBox(bw, bh, bd, x, y, z) {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(bw, bh, bd), blackMat);
+      m.position.set(x, y, z);
+      return m;
+    }
+
+    function buildW(s) {
+      const g = new THREE.Group();
+      const w = baseW * s;
+      const h = baseH * s;
+      const t = baseT * s;
+      const d = baseD * s;
+      const topY    =  h / 2;
+      const botY    = -h / 2;
+      const xLeft   = -w / 2;
+      const xMidL   = -w / 6;
+      const xMidR   =  w / 6;
+      const xRight  =  w / 2;
+
+      function diagonalStroke(x1, y1, x2, y2) {
+        const dx = x2 - x1, dy = y2 - y1;
+        const len = Math.hypot(dx, dy);
+        const angle = Math.atan2(dy, dx);
+        const box = new THREE.Mesh(
+          new THREE.BoxGeometry(len, t, d),
+          blackMat
+        );
+        box.position.set((x1 + x2) / 2, (y1 + y2) / 2, 0);
+        box.rotation.z = angle;
+        return box;
+      }
+      g.add(diagonalStroke(xLeft,  topY, xMidL, botY));
+      g.add(diagonalStroke(xMidL,  botY, 0,     topY));
+      g.add(diagonalStroke(0,      topY, xMidR, botY));
+      g.add(diagonalStroke(xMidR,  botY, xRight, topY));
+      return g;
+    }
+
+    function buildI(s) {
+      const g = new THREE.Group();
+      const w = baseW * s * 0.4;
+      const h = baseH * s;
+      const t = baseT * s;
+      const d = baseD * s;
+      g.add(makeBox(t, h, d, 0, 0, 0));
+      g.add(makeBox(w, t, d, 0,  h/2 - t/2, 0));
+      g.add(makeBox(w, t, d, 0, -h/2 + t/2, 0));
+      return g;
+    }
+
+    function buildL(s) {
+      const g = new THREE.Group();
+      const w = baseW * s * 0.7;
+      const h = baseH * s;
+      const t = baseT * s;
+      const d = baseD * s;
+      g.add(makeBox(t, h, d, -w/2 + t/2, 0, 0));
+      g.add(makeBox(w, t, d, 0, -h/2 + t/2, 0));
+      return g;
+    }
+
+    const sW  = 1.00;
+    const sI  = 0.92;
+    const sL1 = 0.82;
+    const sL2 = 0.70;
+
+    const W  = buildW(sW);
+    const I  = buildI(sI);
+    const L1 = buildL(sL1);
+    const L2 = buildL(sL2);
+
+    const wW  = baseW * sW;
+    const wI  = baseW * sI  * 0.4;
+    const wL1 = baseW * sL1 * 0.7;
+    const wL2 = baseW * sL2 * 0.7;
+
+    const gap = 0.06;
+    const xW  = 2.06 + wW / 2;
+    const xI  = xW  + wW / 2  + gap + wI  / 2;
+    const xL1 = xI  + wI / 2  + gap + wL1 / 2;
+    const xL2 = xL1 + wL1 / 2 + gap + wL2 / 2;
+
+    const xMid = (xW + xL2) / 2;
+
+    W.position.set(xW  - xMid, 0, 0);
+    I.position.set(xI  - xMid, 0, 0);
+    L1.position.set(xL1 - xMid, 0, 0);
+    L2.position.set(xL2 - xMid, 0, 0);
+
+    const willStack = new THREE.Group();
+    willStack.add(W);
+    willStack.add(I);
+    willStack.add(L1);
+    willStack.add(L2);
+    willStack.position.x = xMid;
+
+    refs.willText.add(willStack);
+    refs.willTextStack = willStack;
+
+    applyVisibility();
+  })();
+
+  // --- BODY TEXT ---
+  refs.bodyText = new THREE.Group();
+  scene.add(refs.bodyText);
+
+  (function buildBodyText() {
+    const blackMat = new THREE.MeshStandardMaterial({
+      color: 0x000000,
+      roughness: 0.55,
+      metalness: 0.1,
+    });
+
+    const w = 0.22;
+    const h = 0.22;
+    const t = 0.040;
+    const d = 0.05;
+
+    function makeBox(bw, bh, bd, x, y, z) {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(bw, bh, bd), blackMat);
+      m.position.set(x, y, z);
+      return m;
+    }
+
+    function buildArc(cx, cy, rx, ry, a0, a1, segs) {
+      const pieces = [];
+      for (let i = 0; i < segs; i++) {
+        const t0 = a0 + (a1 - a0) * (i / segs);
+        const t1 = a0 + (a1 - a0) * ((i + 1) / segs);
+        const x0 = cx + rx * Math.cos(t0), y0 = cy + ry * Math.sin(t0);
+        const x1 = cx + rx * Math.cos(t1), y1 = cy + ry * Math.sin(t1);
+        const dx = x1 - x0, dy = y1 - y0;
+        const len = Math.hypot(dx, dy);
+        const angle = Math.atan2(dy, dx);
+        const box = new THREE.Mesh(
+          new THREE.BoxGeometry(len * 1.15, t, d),
+          blackMat
+        );
+        box.position.set((x0 + x1) / 2, (y0 + y1) / 2, 0);
+        box.rotation.z = angle;
+        pieces.push(box);
+      }
+      return pieces;
+    }
+
+    function buildB() {
+      const g = new THREE.Group();
+      const spineX = -w/2 + t/2;
+      g.add(makeBox(t, h, d, spineX, 0, 0));
+      const bowlCx = spineX;
+      const bowlRx = w - t * 1.2;
+      const bowlRy = h / 4;
+      buildArc(bowlCx, h/4, bowlRx, bowlRy, -Math.PI/2, Math.PI/2, 12)
+        .forEach(p => g.add(p));
+      buildArc(bowlCx, -h/4, bowlRx, bowlRy, -Math.PI/2, Math.PI/2, 12)
+        .forEach(p => g.add(p));
+      return g;
+    }
+
+    function buildD() {
+      const g = new THREE.Group();
+      const spineX = -w/2 + t/2;
+      g.add(makeBox(t, h, d, spineX, 0, 0));
+      const bowlRx = w - t * 1.2;
+      const bowlRy = h / 2;
+      buildArc(spineX, 0, bowlRx, bowlRy, -Math.PI/2, Math.PI/2, 16)
+        .forEach(p => g.add(p));
+      return g;
+    }
+
+    function buildO() {
+      const g = new THREE.Group();
+      g.add(new THREE.Mesh(
+        new THREE.TorusGeometry(w/2, t/2, 8, 32),
+        blackMat
+      ));
+      return g;
+    }
+
+    function buildY() {
+      const g = new THREE.Group();
+      const meetY = -h * 0.05;
+      function diag(x1, y1, x2, y2) {
+        const dx = x2 - x1, dy = y2 - y1;
+        const len = Math.hypot(dx, dy);
+        const angle = Math.atan2(dy, dx);
+        const box = new THREE.Mesh(
+          new THREE.BoxGeometry(len, t, d),
+          blackMat
+        );
+        box.position.set((x1 + x2) / 2, (y1 + y2) / 2, 0);
+        box.rotation.z = angle;
+        return box;
+      }
+      g.add(diag(-w/2, h/2, 0, meetY));
+      g.add(diag( w/2, h/2, 0, meetY));
+      const stemLen = meetY - (-h/2);
+      g.add(makeBox(t, stemLen, d, 0, meetY - stemLen/2, 0));
+      return g;
+    }
+
+    const B = buildB();
+    const O = buildO();
+    const D = buildD();
+    const Y = buildY();
+
+    const gap = 0.06;
+    const step = h + gap;
+    B.position.set(0,  step * 1.5, 0);
+    O.position.set(0,  step * 0.5, 0);
+    D.position.set(0, -step * 0.5, 0);
+    Y.position.set(0, -step * 1.5, 0);
+
+    const stack = new THREE.Group();
+    stack.add(B);
+    stack.add(O);
+    stack.add(D);
+    stack.add(Y);
+
+    stack.position.x = 3.20;
+
+    refs.bodyText.add(stack);
+    refs.bodyTextStack = stack;
+    applyVisibility();
+  })();
+
+  // --- REGION LABELS (white text painted on each lune's curved face) ---
+  // Four labels, each on a slight arc following the curve of its lune:
+  //   POSITIVE ANIMA(-US)   on the upper-west blue/maroon lune
+  //   NEGATIVE ANIMA(-US)   on the lower-west maroon/blue lune
+  //   PRIMARY GENDER ARCHETYPES   on the upper-east green lune
+  //   SHADOW                       on the bottom gray lune
+  // Plus a curved arrow sweeping from the PGA label down into the lower
+  // green lune, indicating the label applies to the whole green region.
+  //
+  // Each label is built from canvas-textured letter planes positioned on
+  // the sphere of radius 1.05 (the lune surface) and oriented along the
+  // local outward normal — like words painted on a globe.  No billboarding;
+  // labels rotate with the scene as the camera orbits.
+  refs.primaryGAText = new THREE.Group();
+  scene.add(refs.primaryGAText);
+
+  (function buildRegionLabels() {
+    const lensR    = 1.05;
+    const standoff = 0.008;     // tiny lift so planes don't z-fight the lune
+
+    // Per-letter canvas: bold white glyph with a soft white halo plus a
+    // thin dark outline so the letters read clearly against any lune color.
+    // Raised / glowing white text (default — for PRIMARY GENDER etc.)
+    function buildLetterTexture(ch) {
+      const c = document.createElement("canvas");
+      c.width  = 96; c.height = 112;
+      const x = c.getContext("2d");
+      x.clearRect(0, 0, c.width, c.height);
+      x.font = "bold 84px Georgia, 'Times New Roman', serif";
+      x.textAlign = "center";
+      x.textBaseline = "middle";
+      const cx = c.width / 2;
+      const cy = c.height / 2;
+
+      // Soft white halo (large, semi-transparent) for that "glowing on
+      // the surface" look.
+      x.shadowColor = "rgba(255,255,255,0.85)";
+      x.shadowBlur  = 8;
+      x.fillStyle   = "#ffffff";
+      x.fillText(ch, cx, cy);
+      // Second pass with no shadow + a thin dark outline for crispness
+      x.shadowColor = "rgba(0,0,0,0)";
+      x.shadowBlur  = 0;
+      x.lineWidth   = 2.5;
+      x.strokeStyle = "rgba(20, 20, 20, 0.85)";
+      x.strokeText(ch, cx, cy);
+      x.fillStyle   = "#ffffff";
+      x.fillText(ch, cx, cy);
+
+      const t = new THREE.CanvasTexture(c);
+      t.minFilter = THREE.LinearFilter;
+      t.magFilter = THREE.LinearFilter;
+      return t;
+    }
+
+    // Debossed / engraved text — letters appear PRESSED INTO the surface.
+    // Built by layering: (1) a darker letter fill matching the surface
+    // tone (so the letter "hole" reads as recessed), (2) a soft dark
+    // inner shadow along the upper-left edges (the cut wall facing away
+    // from the light), (3) a thin light highlight along the lower-right
+    // edges (light catching the bottom of the cut).
+    function buildLetterTextureDebossed(ch) {
+      const c = document.createElement("canvas");
+      c.width  = 96; c.height = 112;
+      const x = c.getContext("2d");
+      x.clearRect(0, 0, c.width, c.height);
+      x.font = "bold 84px Georgia, 'Times New Roman', serif";
+      x.textAlign = "center";
+      x.textBaseline = "middle";
+      const cx = c.width / 2;
+      const cy = c.height / 2;
+
+      // (1) Dark base letter fill — much darker than the gray lune, so
+      // the letter shape reads as a deep recess.
+      x.fillStyle = "#2a2a2a";
+      x.fillText(ch, cx, cy);
+
+      // (2) Inner-shadow effect on upper-left edges.  Built by stroking
+      // the letter with a dark color, then offsetting slightly down-right
+      // to simulate light catching the bottom of the cut while the top
+      // edge stays in shadow.
+      x.lineWidth = 1.5;
+      x.strokeStyle = "rgba(10, 10, 10, 0.95)";
+      x.strokeText(ch, cx - 0.6, cy - 0.6);
+
+      // (3) Subtle light edge along the lower-right — paint the same
+      // glyph offset down-right with a pale color, then mask it to just
+      // the rim by re-stroking the original glyph shape over it.
+      // Simpler: use a thin stroke offset down-right with a light tone.
+      x.strokeStyle = "rgba(200, 200, 200, 0.55)";
+      x.lineWidth = 1.0;
+      x.strokeText(ch, cx + 0.8, cy + 0.8);
+
+      const t = new THREE.CanvasTexture(c);
+      t.minFilter = THREE.LinearFilter;
+      t.magFilter = THREE.LinearFilter;
+      return t;
+    }
+
+    // Place one letter on the sphere surface at given world angles.
+    //   thetaXY : azimuth in XY plane (CCW from +X)
+    //   phiZ    : tilt from XY plane toward +Z (positive lifts toward camera)
+    //   h       : letter height in world units
+    function buildFlatLine(text, h) {
+      const g = new THREE.Group();
+      const aspect = 96 / 112;
+      const letterW = h * aspect;
+      const letterStep = letterW * 0.78;   // tighter than full glyph width
+      const letters = text.split("");
+      const total = letters.length;
+      const xStart = -letterStep * (total - 1) / 2;
+      for (let i = 0; i < total; i++) {
+        const ch = letters[i];
+        if (ch === " ") continue;
+        const tex = buildLetterTexture(ch);
+        const mat = new THREE.MeshBasicMaterial({
+          map: tex,
+          transparent: true,
+          depthWrite: false,
+          side: THREE.DoubleSide,
+        });
+        const plane = new THREE.Mesh(new THREE.PlaneGeometry(letterW, h), mat);
+        plane.position.x = xStart + i * letterStep;
+        g.add(plane);
+      }
+      return g;
+    }
+
+    // Build a 2-line label (line1 stacked above line2) in a local XY plane,
+    // then place it tangent to the lune sphere so it sits painted on the
+    // front-facing crust.
+    //
+    //   line1, line2 : strings (line2 may be empty for single-line labels)
+    //   surfaceDir   : THREE.Vector3 — direction from origin to the
+    //                  surface point where the label center should sit.
+    //                  Must have positive Z (front-facing) for the label
+    //                  to be visible from the default camera.
+    //   h            : letter height
+    // Build a label that follows a small-circle ARC on the sphere — letters
+    // sit along a curved path on the lune surface, with each letter rotated
+    // to stay tangent to the arc.  This makes each label hug the rim of its
+    // lune the way a name curves around a stadium logo.
+    //
+    //   line1, line2     : strings (line2 may be empty)
+    //   centerAngleDeg   : clock angle (degrees, CCW from +X) of the label's
+    //                      midpoint, expressed in the visible-face polar
+    //                      coordinates we use elsewhere
+    //   ringDist         : 0..1 — how far out from the front-pole apex the
+    //                      label's arc sits.  Larger = closer to the lune rim.
+    //   h                : letter height (world units)
+    //
+    // The arc is a small circle on the sphere at constant alpha (where
+    // alpha = MAX_ALPHA * ringDist).  Letters span an angular range
+    // centered on centerAngleDeg in the theta direction (CCW positive).
+    function buildSurfaceLabel(line1, line2, centerAngleDeg, ringDist, h, style, direction) {
+      const group = new THREE.Group();
+      const aspect = 96 / 112;
+      const letterW = h * aspect;
+
+      // Direction defaults to +1 (CCW layout — letter[0] at smaller theta,
+      // marching toward larger theta).  For labels in the upper half of
+      // the disc (theta near 90°), the camera reads CCW as right-to-left,
+      // so those labels need direction = -1 (CW layout).
+      const dirSign = (direction === -1) ? -1 : +1;
+
+      // Texture builder selection based on style flag
+      const texFn = (style === "debossed") ? buildLetterTextureDebossed
+                                            : buildLetterTexture;
+
+      // Simple 2D-arc placement: each letter sits in a flat plane parallel
+      // to X-Y, at Z = lensR + standoff (right in front of the lune's
+      // front-facing crust).  Letters are arranged along a circular arc
+      // of radius `arcR` centered at the origin (front-pole apex), with
+      // each letter rotated in-plane so its top points OUTWARD from the
+      // arc center (toward the rim) — the stadium-logo curve.
+      //
+      //   centerAngleDeg : XY angle (CCW from +X) of the label's midpoint
+      //   ringDist       : 0..1, controls arc radius (0 = at apex, 1 = at
+      //                    lune rim)
+      //   h              : letter height in world units
+      //
+      // Each letter sits at the actual lune surface depth (Z computed from
+      // sphere radius at the letter's X-Y position), with depthWrite on
+      // so the tunnel and other geometry can properly occlude letters
+      // where they cross.  This creates the illusion of letters going
+      // through the inner path where the tunnel passes through the label.
+      const arcR_max = lensR * Math.sin(MAX_ALPHA);   // rim radius in X-Y
+
+      function placeOneLine(text, ringDistLine) {
+        const arcR = arcR_max * ringDistLine;
+        // Per-letter angular step around the 2D arc, in radians
+        const lineStep = (letterW * 0.85) / Math.max(arcR, 0.01);
+
+        const letters = text.split("");
+        const total = letters.length;
+        // Layout direction controlled by dirSign: +1 marches CCW (theta
+        // increasing), -1 marches CW (theta decreasing).  Combined with
+        // the start position so the label is centered either way.
+        const startAngle = centerAngleDeg * Math.PI / 180
+                         - dirSign * lineStep * (total - 1) / 2;
+
+        for (let i = 0; i < total; i++) {
+          const ch = letters[i];
+          if (ch === " ") continue;
+          const angle = startAngle + dirSign * i * lineStep;
+
+          const px = Math.cos(angle) * arcR;
+          const py = Math.sin(angle) * arcR;
+          // Z on the lune sphere surface at this (px, py): sqrt(R² - x² - y²)
+          // plus a small standoff so we float just outside the surface.
+          const r2 = lensR * lensR - px * px - py * py;
+          const pz = (r2 > 0 ? Math.sqrt(r2) : 0) + standoff;
+
+          const tex = texFn(ch);
+          const mat = new THREE.MeshBasicMaterial({
+            map: tex,
+            transparent: true,
+            depthWrite: true,            // tunnel etc. can occlude letters
+            depthTest: true,
+            side: THREE.DoubleSide,
+            alphaTest: 0.5,              // crisp edges for depth-correct occlusion
+          });
+          const plane = new THREE.Mesh(new THREE.PlaneGeometry(letterW, h), mat);
+
+          plane.position.set(px, py, pz);
+
+          // Each letter stays upright (world-aligned: top = world +Y).
+          // We only vary the letter's position along the arc, not its
+          // rotation.  This produces a horizontal label rather than
+          // text-curving-along-an-arc, but guarantees no mirroring.
+          // (Curving can be re-added later once the basic placement is
+          // verified working.)
+
+          group.add(plane);
+        }
+      }
+
+      // Two-line stacking: line1 sits on the OUTER arc (closer to rim) so
+      // it reads "above" line2.  line2 sits on the inner arc (closer to apex).
+      const lineGapWorld = h * 1.30;
+      const ringDistDelta = lineGapWorld / arcR_max;
+
+      if (line2) {
+        placeOneLine(line1, ringDist + ringDistDelta * 0.5);   // outer
+        placeOneLine(line2, ringDist - ringDistDelta * 0.5);   // inner
+      } else {
+        placeOneLine(line1, ringDist);
+      }
+
+      return group;
+    }
+
+    // ---- Region label specs ----
+    // Each label sits on the front-facing crust of its lune.  surfaceDir
+    // is built to have a strong +Z component (so the outward normal at the
+    // surface point faces the camera roughly along +Z).  The XY portion of
+    // surfaceDir places the label at the right clock-position around the
+    // visible disc.
+    //
+    //   The visible "disc" of the inner sphere from the default camera is
+    //   the +Z hemisphere.  We pick each label's center by:
+    //     - radialAngle: clock direction in the visible XY plane
+    //                    (0 = +X right, 90° = +Y up)
+    //     - radialDist:  distance from front-pole apex (0=apex, 1=rim).
+    //                    Multiplied to set how far out toward the lune
+    //                    edge the label sits.
+    //   surfaceDir = (sin(α)·cos(θ), sin(α)·sin(θ), cos(α))  where
+    //   α = radialDist · MAX_α (small-angle = near apex, large = near rim)
+    //   θ = radialAngle in XY plane.
+
+    const MAX_ALPHA = Math.PI * (62 / 180);   // how far out from front pole
+
+    function dirAt(radialAngleDeg, radialDist) {
+      const theta = radialAngleDeg * Math.PI / 180;
+      const alpha = MAX_ALPHA * radialDist;
+      const sinA = Math.sin(alpha);
+      return new THREE.Vector3(
+        Math.cos(theta) * sinA,
+        Math.sin(theta) * sinA,
+        Math.cos(alpha)
+      );
+    }
+
+    const lineH = 0.13;     // letter height — sized to fit on each lune
+
+    // Each label sits along an arc on its lune's front face.  The label's
+    // arc is a small circle on the sphere centered on the front pole
+    // (toward camera), with the label's midpoint at the given clock-angle
+    // and at a ringDist from 0 (front pole) to 1 (lune rim).
+    //
+    // Starting with just two labels — PRIMARY GENDER ARCHETYPES on the
+    // green lune and SHADOW on the bottom gray lune — to dial in the
+    // arc-text orientation before adding the others back.
+
+    // PRIMARY GENDER ARCHETYPES is now baked into the green lune's
+    // surface texture (see the overlay callback in buildArchetypeWedgeDisc).
+    // SHADOW will follow the same approach once the green-lune baking is
+    // verified — for now we leave both old plane labels disabled.
+    //
+    // refs.primaryGAText.add(
+    //   buildSurfaceLabel("PRIMARY GENDER", "ARCHETYPES", 50, 0.78, lineH, null, -1)
+    // );
+    // refs.primaryGAText.add(
+    //   buildSurfaceLabel("SHADOW", "", 285, 0.70, lineH * 1.05, "debossed")
+    // );
+
+    refs.primaryGATextStack = refs.primaryGAText;
+    applyVisibility();
+  })();
+
+  // --- WILL VORTEX ---
+  function buildWillVortex() {
+    const group = new THREE.Group();
+
+    const xWide = 2.00;
+    const xTip  = 2.95;
+    const length = xTip - xWide;
+    const wideRadius = 0.45;
+
+    function buildStrand(phase, turns, tubeR, color) {
+      const segments = 240;
+      const pts = [];
+      for (let i = 0; i <= segments; i++) {
+        const t = i / segments;
+        const x = xWide + length * t;
+        const r = wideRadius * (1 - t * 0.95);
+        const angle = (t * Math.PI * 2 * turns) + phase;
+        pts.push(new THREE.Vector3(
+          x,
+          Math.cos(angle) * r,
+          Math.sin(angle) * r,
+        ));
+      }
+      const curve = new THREE.CatmullRomCurve3(pts);
+      const tubeGeo = new THREE.TubeGeometry(curve, segments, tubeR, 6, false);
+      const mat = new THREE.MeshStandardMaterial({
+        color: color,
+        transparent: true,
+        opacity: 0.32,
+        roughness: 0.4,
+        metalness: 0.15,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      });
+      return new THREE.Mesh(tubeGeo, mat);
+    }
+
+    const turns = 2.2;
+    const tubeR = 0.02;
+    const colors = [
+      0xe88030,
+      0xe8c020,
+      0x40a060,
+      0x3070b0,
+      0xe88030,
+      0xe8c020,
+      0x40a060,
+      0x3070b0,
+    ];
+    const N = colors.length;
+    for (let i = 0; i < N; i++) {
+      const phase = (i / N) * Math.PI * 2;
+      group.add(buildStrand(phase, turns, tubeR, colors[i]));
+    }
+
+    return group;
+  }
+
+  refs.willVortex = buildWillVortex();
+  scene.add(refs.willVortex);
+
+
+  // ====================================================================
+  // 4b. LABELS
+  // ====================================================================
+
+  function makeLabelSprite(text, opts) {
+    opts = opts || {};
+    const fontSize    = opts.fontSize    || 44;
+    const fontFamily  = opts.fontFamily  || "Georgia, 'Times New Roman', serif";
+    const color       = opts.color       || "#1a1a1a";
+    const padding     = opts.padding     || 6;
+    const worldHeight = opts.worldHeight || 0.32;
+
+    const measCanvas = document.createElement("canvas");
+    const measCtx = measCanvas.getContext("2d");
+    measCtx.font = "bold " + fontSize + "px " + fontFamily;
+    const textW = Math.ceil(measCtx.measureText(text).width);
+    const canvasW = textW + padding * 2;
+    const canvasH = fontSize + padding * 2;
+
+    const scale = 2;
+    const canvas = document.createElement("canvas");
+    canvas.width  = canvasW * scale;
+    canvas.height = canvasH * scale;
+    const ctx = canvas.getContext("2d");
+    ctx.scale(scale, scale);
+
+    ctx.font = "bold " + fontSize + "px " + fontFamily;
+    ctx.textBaseline = "middle";
+    ctx.textAlign = "center";
+
+    ctx.lineWidth = 5;
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.85)";
+    ctx.strokeText(text, canvasW / 2, canvasH / 2);
+
+    ctx.fillStyle = color;
+    ctx.fillText(text, canvasW / 2, canvasH / 2);
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.minFilter = THREE.LinearFilter;
+    tex.magFilter = THREE.LinearFilter;
+
+    const mat = new THREE.SpriteMaterial({
+      map: tex,
+      transparent: true,
+      depthTest: false,
+      depthWrite: false,
+    });
+    const sprite = new THREE.Sprite(mat);
+    sprite.renderOrder = 999;
+
+    const aspect = canvasW / canvasH;
+    sprite.scale.set(worldHeight * aspect, worldHeight, 1);
+
+    return sprite;
+  }
+
+  function makeLeader(anchor, labelPos, color) {
+    const geo = new THREE.BufferGeometry().setFromPoints([anchor, labelPos]);
+    return new THREE.Line(geo, new THREE.LineBasicMaterial({
+      color: color || 0x6a5828, transparent: true, opacity: 0.55,
+    }));
+  }
+
+  function makeLabel(text, anchor, labelPos, opts) {
+    const group = new THREE.Group();
+    group.add(makeLeader(anchor, labelPos));
+    const sprite = makeLabelSprite(text, opts);
+    sprite.position.copy(labelPos);
+    group.add(sprite);
+    return group;
+  }
+
+  refs.labelSoul = makeLabel(
+    "Ego Defenses",
+    new THREE.Vector3(2.00, 2.10, 0),
+    new THREE.Vector3(3.1,  2.55, 0)
+  );
+  scene.add(refs.labelSoul);
+
+  // labelSarx removed — LOWER PERSONAL UNCONSCIOUS / SARX is now arc-curved
+  // beveled text in the lower hemisphere.
+
+  // labelShadow removed — SHADOW is now baked into the gray wedge skin.
+
+  // labelStillPoint removed — STILL POINT is now baked into the still point sphere.
+
+  // labelAxis removed — ARCHETYPAL SELF / HUMAN SPIRIT is now beveled
+  // text inside the ovoid.
+
+  // labelOpening removed — OPENING TO THE SPIRITUAL REALM is now beveled
+  // text inside the opening ovoid at the west end of the tunnel.
+
+  // labelInnerPath removed — THE INNER PATH is now 3D bronze text inside the tunnel.
+
+  // labelEgoDefenses removed — "Ego Defenses" inscription is on the brick wall.
+
+  // labelWill removed — WILL is rendered as 3D primitive-shape letters
+  // floating above the will vortex.
+
+  // labelBody removed — BODY is rendered as 3D primitive-shape letters
+  // beside the body shell.
+
+  refs.labelPersona = makeLabel(
+    "Persona (Will + Body)",
+    new THREE.Vector3(2.6, -0.6, 0.5),
+    new THREE.Vector3(2.0, -3.8, 0.5)
+  );
+  scene.add(refs.labelPersona);
+
+  // labelPosAnimus removed — POSITIVE ANIMA(-US) is baked into the blue lune.
+
+  // labelPrimary removed — PRIMARY GENDER ARCHETYPES is baked into the green lune.
+
+  // labelGenderArch removed — Gender Archetype zone is shown by the
+  // green archetype wedges in the inner ring; redundant label dropped.
+
+  // labelNegAnimus removed — NEGATIVE ANIMA(-US) is baked into the maroon lune.
+
+  // ====================================================================
+  // 5. CUSTOM ORBIT CAMERA
+  // ====================================================================
+
+  const dom = renderer.domElement;
+  let dragging = false, panning = false;
+  let lastX = 0, lastY = 0;
+
+  dom.addEventListener("contextmenu", (e) => e.preventDefault());
+
+  dom.addEventListener("mousedown", (e) => {
+    if (e.button === 2) { panning = true; }
+    else { dragging = true; }
+    lastX = e.clientX; lastY = e.clientY;
+  });
+  window.addEventListener("mouseup", () => { dragging = false; panning = false; });
+  window.addEventListener("mousemove", (e) => {
+    if (!dragging && !panning) return;
+    const dx = e.clientX - lastX, dy = e.clientY - lastY;
+    lastX = e.clientX; lastY = e.clientY;
+
+    if (dragging) {
+      camState.theta -= dx * 0.005;
+      camState.phi   = Math.max(0.05, Math.min(Math.PI - 0.05, camState.phi - dy * 0.005));
+      updateCamera();
+    } else if (panning) {
+      const panSpeed = camState.radius * 0.0015;
+      const right = new THREE.Vector3();
+      const up    = new THREE.Vector3(0, 1, 0);
+      camera.getWorldDirection(right);
+      right.cross(up).normalize();
+      const trueUp = new THREE.Vector3().crossVectors(right, camera.getWorldDirection(new THREE.Vector3())).normalize().negate();
+      camState.target.addScaledVector(right, -dx * panSpeed);
+      camState.target.addScaledVector(trueUp,  dy * panSpeed);
+      updateCamera();
+    }
+  });
+  dom.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    const factor = Math.exp(e.deltaY * 0.0015);
+    camState.radius = Math.max(2, Math.min(40, camState.radius * factor));
+    updateCamera();
+  }, { passive: false });
+
+  let touchState = null;
+  dom.addEventListener("touchstart", (e) => {
+    if (e.touches.length === 1) {
+      touchState = { mode: "rotate", x: e.touches[0].clientX, y: e.touches[0].clientY };
+    } else if (e.touches.length === 2) {
+      const t0 = e.touches[0], t1 = e.touches[1];
+      touchState = {
+        mode: "pinch",
+        dist: Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY),
+        cx: (t0.clientX + t1.clientX) / 2,
+        cy: (t0.clientY + t1.clientY) / 2,
+      };
+    }
+  }, { passive: false });
+  dom.addEventListener("touchmove", (e) => {
+    e.preventDefault();
+    if (!touchState) return;
+    if (touchState.mode === "rotate" && e.touches.length === 1) {
+      const t = e.touches[0];
+      const dx = t.clientX - touchState.x, dy = t.clientY - touchState.y;
+      touchState.x = t.clientX; touchState.y = t.clientY;
+      camState.theta -= dx * 0.005;
+      camState.phi   = Math.max(0.05, Math.min(Math.PI - 0.05, camState.phi - dy * 0.005));
+      updateCamera();
+    } else if (touchState.mode === "pinch" && e.touches.length === 2) {
+      const t0 = e.touches[0], t1 = e.touches[1];
+      const newDist = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
+      const factor = touchState.dist / newDist;
+      touchState.dist = newDist;
+      camState.radius = Math.max(2, Math.min(40, camState.radius * factor));
+      updateCamera();
+    }
+  }, { passive: false });
+  dom.addEventListener("touchend", () => { touchState = null; });
+
+  // ====================================================================
+  // 6. RESIZE
+  // ====================================================================
+
+  window.addEventListener("resize", () => {
+    const w2 = mount.clientWidth, h2 = mount.clientHeight;
+    camera.aspect = w2 / h2;
+    camera.updateProjectionMatrix();
+    renderer.setSize(w2, h2);
+  });
+
+  // ====================================================================
+  // 7. RENDER LOOP
+  // ====================================================================
+
+  // ====================================================================
+  // FLOATING HTML LABELS — pinned to fixed perimeter slots
+  //
+  // Each label sits at a fixed CSS position around the edge of the
+  // canvas (top-center, top-left, top-right, mid-right, bottom-left,
+  // bottom-center).  Slot choice corresponds to the referent's
+  // location in the 3D scene.  Master toggle (visibility.floatingPoints)
+  // shows/hides all labels; each label's body is collapsed by default
+  // and expands on header click.
+  // ====================================================================
+  const floatLabelsLayer = document.getElementById("float-labels-layer");
+  document.querySelectorAll(".float-label").forEach((el) => {
+    const hdr = el.querySelector(".fl-header");
+    if (hdr) {
+      hdr.addEventListener("click", () => {
+        el.classList.toggle("expanded");
+      });
+    }
+  });
+
+  function updateFloatingLabels() {
+    if (!floatLabelsLayer) return;
+    floatLabelsLayer.classList.toggle("visible", !!visibility.floatingPoints);
+  }
+
+
+  function tick() {
+    requestAnimationFrame(tick);
+
+    function billboard(stack, parent) {
+      if (!stack || !parent) return;
+      const parentQ = new THREE.Quaternion();
+      parent.getWorldQuaternion(parentQ);
+      const parentInv = parentQ.clone().invert();
+      stack.quaternion.copy(camera.quaternion).premultiply(parentInv);
+    }
+    billboard(refs.bodyTextStack, refs.bodyText);
+    billboard(refs.egoTextStack,  refs.egoText);
+    billboard(refs.willTextStack, refs.willText);
+
+    // GLORY: each letter billboards individually so they all face camera
+    // while staying positioned along the cone's tilted axis.
+    if (refs.gloryTextStack) {
+      const gParent = refs.gloryTextStack.parent;
+      const gParentQ = new THREE.Quaternion();
+      if (gParent) gParent.getWorldQuaternion(gParentQ);
+      const gParentInv = gParentQ.clone().invert();
+      refs.gloryTextStack.children.forEach((letter) => {
+        letter.quaternion.copy(camera.quaternion).premultiply(gParentInv);
+      });
+    }
+
+    // HUMAN SPIRIT ARCHETYPE: single plane billboards as a whole.
+    if (refs.humanSpiritTextStack) {
+      const hsParent = refs.humanSpiritTextStack.parent;
+      const hsParentQ = new THREE.Quaternion();
+      if (hsParent) hsParent.getWorldQuaternion(hsParentQ);
+      refs.humanSpiritTextStack.quaternion
+        .copy(camera.quaternion)
+        .premultiply(hsParentQ.invert());
+    }
+
+    // OPENING TO THE SPIRITUAL REALM: single plane billboards as a whole.
+    if (refs.openingTextStack) {
+      const opParent = refs.openingTextStack.parent;
+      const opParentQ = new THREE.Quaternion();
+      if (opParent) opParent.getWorldQuaternion(opParentQ);
+      refs.openingTextStack.quaternion
+        .copy(camera.quaternion)
+        .premultiply(opParentQ.invert());
+    }
+
+    // HIGHER UNCONSCIOUS (NOUS): single plane billboards as a whole.
+    if (refs.nousTextStack) {
+      const nParent = refs.nousTextStack.parent;
+      const nParentQ = new THREE.Quaternion();
+      if (nParent) nParent.getWorldQuaternion(nParentQ);
+      refs.nousTextStack.quaternion
+        .copy(camera.quaternion)
+        .premultiply(nParentQ.invert());
+    }
+
+    // LOWER UNCONSCIOUS (SARX): single plane billboards as a whole.
+    if (refs.sarxTextStack) {
+      const sParent = refs.sarxTextStack.parent;
+      const sParentQ = new THREE.Quaternion();
+      if (sParent) sParent.getWorldQuaternion(sParentQ);
+      refs.sarxTextStack.quaternion
+        .copy(camera.quaternion)
+        .premultiply(sParentQ.invert());
+    }
+
+    // ARCHETYPE SCALES: each ∞ symbol's rotation is set at placement
+    // so its long axis runs tangent to the great circle.  No per-frame
+    // billboarding — they stay locked to the sphere edge like raised
+    // scales, matching Troy's drawing.
+
+    updateFloatingLabels();
+
+    renderer.render(scene, camera);
+  }
+  tick();
+
+  // ====================================================================
+  // 8. PANEL WIRING — drop-downs anchored to their buttons
+  //
+  // Each button toggles its own panel.  Only one panel open at a time;
+  // clicking outside closes the open one.
+  // ====================================================================
+  const panelButton     = document.getElementById("panel-button");
+  const panelMenu       = document.getElementById("panel-menu");
+  const cameraToggleBtn = document.getElementById("camera-toggle");
+  const cameraPanel     = document.getElementById("camera-panel");
+
+  function closeAllPanels() {
+    if (panelMenu) panelMenu.classList.remove("open");
+    if (panelButton) panelButton.classList.remove("open");
+    if (cameraPanel) cameraPanel.classList.remove("open");
+    if (cameraToggleBtn) cameraToggleBtn.innerHTML = "Camera Angles &#9662;";
+  }
+
+  if (panelButton && panelMenu) {
+    panelButton.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const isOpen = panelMenu.classList.contains("open");
+      closeAllPanels();
+      if (!isOpen) {
+        panelMenu.classList.add("open");
+        panelButton.classList.add("open");
+      }
+    });
+  }
+
+  if (cameraToggleBtn && cameraPanel) {
+    cameraToggleBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const isOpen = cameraPanel.classList.contains("open");
+      closeAllPanels();
+      if (!isOpen) {
+        cameraPanel.classList.add("open");
+        cameraToggleBtn.innerHTML = "Camera Angles &#9652;";
+      }
+    });
+  }
+
+  // Click outside a panel closes everything.  We listen on document
+  // and bail out if the click happened inside any panel or button.
+  document.addEventListener("click", (e) => {
+    if (panelMenu && panelMenu.contains(e.target)) return;
+    if (cameraPanel && cameraPanel.contains(e.target)) return;
+    if (panelButton && panelButton.contains(e.target)) return;
+    if (cameraToggleBtn && cameraToggleBtn.contains(e.target)) return;
+    closeAllPanels();
+  });
+
+  document.querySelectorAll('input[type=checkbox][data-key]').forEach((cb) => {
+    const key = cb.getAttribute("data-key");
+    cb.checked = !!visibility[key];
+    cb.addEventListener("change", () => {
+      const group = cb.getAttribute("data-radio-group");
+      if (group && cb.checked) {
+        document.querySelectorAll(
+          'input[type=checkbox][data-radio-group="' + group + '"]'
+        ).forEach((sib) => {
+          if (sib !== cb && sib.checked) {
+            sib.checked = false;
+            visibility[sib.getAttribute("data-key")] = false;
+          }
+        });
+      }
+      visibility[key] = cb.checked;
+      applyVisibility();
+    });
+  });
+
+  applyVisibility();
+
+
+  const DEG_TO_RAD = Math.PI / 180;
+  const RAD_TO_DEG = 180 / Math.PI;
+
+  const latitudeRegions = [
+    { top: -2.0, name: "below the soul" },
+    { top: -0.5, name: "lower hemisphere (Sarx)" },
+    { top:  0.5, name: "center (Still Point / tunnel)" },
+    { top:  2.0, name: "upper hemisphere (Nous)" },
+    { top:  3.5, name: "above the soul" },
+  ];
+  function latitudeRegionNameAt(y) {
+    for (const r of latitudeRegions) if (y < r.top) return r.name;
+    return latitudeRegions[latitudeRegions.length - 1].name;
+  }
+
+  const elevationSlider = document.getElementById("elevation-slider");
+  if (elevationSlider) {
+    elevationSlider.addEventListener("input", () => {
+      const elevationRad = parseFloat(elevationSlider.value) * DEG_TO_RAD;
+      camState.phi = Math.PI / 2 - elevationRad;
+      camState.phi = Math.max(0.05, Math.min(Math.PI - 0.05, camState.phi));
+      updateCamera();
+    });
+  }
+
+  // Brick-wall porosity slider — regenerates the brick texture
+  // canvas with an increasing fraction of missing bricks, then swaps
+  // the new texture onto the shared brickMat used by both cap faces.
+  const porositySlider = document.getElementById("porosity-slider");
+  if (porositySlider) {
+    porositySlider.addEventListener("input", () => {
+      brickPorosity = parseFloat(porositySlider.value);
+      if (refs.brickMat) {
+        const old = refs.brickMat.map;
+        refs.brickMat.map = makeBrickTexture(brickPorosity);
+        refs.brickMat.needsUpdate = true;
+        if (old) old.dispose();
+      }
+    });
+  }
+
+  const latitudeSlider  = document.getElementById("latitude-slider");
+  const latitudeReadout = document.getElementById("latitude-readout");
+  if (latitudeSlider && latitudeReadout) {
+    latitudeSlider.addEventListener("input", () => {
+      const y = parseFloat(latitudeSlider.value);
+      camState.target.y = y;
+      updateCamera();
+      latitudeReadout.textContent = latitudeRegionNameAt(y);
+    });
+    latitudeReadout.textContent = latitudeRegionNameAt(parseFloat(latitudeSlider.value));
+  }
+
+  const longitudeSlider = document.getElementById("longitude-slider");
+  if (longitudeSlider) {
+    longitudeSlider.addEventListener("input", () => {
+      camState.theta = parseFloat(longitudeSlider.value) * DEG_TO_RAD;
+      updateCamera();
+    });
+  }
+
+  const panSlider = document.getElementById("pan-slider");
+  if (panSlider) {
+    panSlider.addEventListener("input", () => {
+      camState.lateralOffset = parseFloat(panSlider.value);
+      updateCamera();
+    });
+  }
+
+  function syncSlidersFromCamera() {
+    if (elevationSlider) {
+      const elevDeg = (Math.PI / 2 - camState.phi) * RAD_TO_DEG;
+      elevationSlider.value = Math.round(elevDeg);
+    }
+    if (longitudeSlider) {
+      let deg = camState.theta * RAD_TO_DEG;
+      deg = ((deg % 360) + 360) % 360;
+      longitudeSlider.value = Math.round(deg);
+    }
+    if (latitudeSlider) {
+      latitudeSlider.value = camState.target.y.toFixed(2);
+      if (latitudeReadout) {
+        latitudeReadout.textContent = latitudeRegionNameAt(camState.target.y);
+      }
+    }
+    if (panSlider) {
+      panSlider.value = camState.lateralOffset.toFixed(2);
+    }
+  }
+  renderer.domElement.addEventListener("mouseup",  syncSlidersFromCamera);
+  window.addEventListener("touchend", syncSlidersFromCamera);
+  syncSlidersFromCamera();
+
+})();
+</script>
+
+</body>
+</html>font-size: 12px; font-style: italic; margin-top: 1px;
+}
+#title-block .h3 {
+font-size: 9px; color: #888; margin-top: 2px; letter-spacing: 1px;
+}
+#title-block .h3 a { pointer-events: auto; }
+
+/* Toggle dropdown — compact button + collapsible menu */
+#control-panel {
+position: absolute; top: 12px; left: 12px;
+z-index: 10;
+font-family: Georgia, ‘Times New Roman’, serif;
+color: #4a3810;
+}
+#panel-button {
+background: rgba(245, 239, 221, 0.95);
+border: 1px solid #c8a85c; border-radius: 4px;
+padding: 5px 10px; font-size: 11px; font-weight: bold;
+cursor: pointer; user-select: none;
+font-family: inherit; color: inherit;
+display: flex; align-items: center; gap: 5px;
+}
+#panel-button .caret {
+display: inline-block; transition: transform 0.15s; font-size: 9px;
+}
+#panel-button.open .caret { transform: rotate(90deg); }
+#panel-menu {
+display: none;
+margin-top: 4px;
+background: rgba(245, 239, 221, 0.97);
+border: 1px solid #c8a85c; border-radius: 4px;
+padding: 6px 8px;
+font-size: 11px;
+max-height: 60vh; overflow-y: auto;
+min-width: 140px;
+}
+#panel-menu.open { display: block; }
+.menu-section {
+font-weight: bold; font-size: 10px; text-transform: uppercase;
+letter-spacing: 0.5px; color: #8a6a20;
+padding: 4px 0 2px 0;
+border-bottom: 1px solid #d8c08a;
+margin-bottom: 2px;
+}
+.menu-section:not(:first-child) { margin-top: 6px; }
+.row { display: flex; align-items: center; gap: 5px; padding: 1px 0; }
+.row.indented { padding-left: 14px; }
+.row label { cursor: pointer; font-size: 11px; }
+.row input[type=checkbox] { margin: 0; cursor: pointer; }
+
+/* Camera hint, bottom-right */
+#camera-hint {
+position: absolute; bottom: 12px; right: 16px;
+font-size: 11px; color: #888; pointer-events: none;
+background: rgba(255,255,255,0.7); padding: 4px 8px; border-radius: 3px;
+}
+
+/* Camera Angles button + drop-down panel (upper-right corner) */
+#camera-toggle {
+position: absolute;
+top: 12px; right: 16px;
+z-index: 20;
+background: rgba(245, 239, 221, 0.95);
+border: 1px solid #c8a85c; border-radius: 4px;
+padding: 5px 10px;
+font-family: Georgia, ‘Times New Roman’, serif;
+font-size: 11px; font-weight: bold;
+color: #4a3810;
+cursor: pointer;
+user-select: none;
+}
+#camera-toggle:hover { background: rgba(245, 239, 221, 1); }
+
+#camera-panel {
+position: absolute;
+top: 44px; right: 16px;
+z-index: 19;
+background: rgba(245, 239, 221, 0.97);
+border: 1px solid #c8a85c; border-radius: 4px;
+padding: 10px 12px;
+font-family: Georgia, ‘Times New Roman’, serif;
+font-size: 11px;
+color: #4a3810;
+width: 280px;
+max-height: calc(100vh - 80px); overflow-y: auto;
+display: none;
+}
+#camera-panel.open { display: block; }
+#camera-panel .ctrl-label {
+font-size: 11px; color: #4a3810; margin-bottom: 3px; margin-top: 4px;
+}
+#camera-panel .ctrl-label .readout {
+font-style: italic; color: #6b4a1a;
+}
+#camera-panel input[type=“range”] {
+width: 100%; cursor: pointer;
+accent-color: #8a6818;
+margin-bottom: 4px;
+}
+#camera-panel .footer {
+margin-top: 6px; font-size: 10.5px;
+color: #6b4a1a; font-style: italic;
+}
+
+/* Important Points — toggleable text overlay (bottom-center) */
+#points-toggle {
+position: absolute;
+bottom: 12px; left: 16px;
+z-index: 20;
+background: rgba(245, 239, 221, 0.95);
+border: 1px solid #c8a85c; border-radius: 4px;
+padding: 5px 10px;
+font-family: Georgia, 'Times New Roman', serif;
+font-size: 11px; font-weight: bold;
+color: #4a3810;
+cursor: pointer;
+user-select: none;
+}
+#points-toggle:hover { background: rgba(245, 239, 221, 1); }
+
+#points-panel {
+position: absolute;
+left: 50%;
+bottom: 50px;
+transform: translateX(-50%);
+z-index: 19;
+background: rgba(248, 240, 218, 0.97);
+border: 1px solid #c8a85c;
+border-radius: 6px;
+padding: 18px 22px 16px 22px;
+font-family: Georgia, 'Times New Roman', serif;
+font-size: 13px;
+line-height: 1.55;
+color: #2a1f08;
+width: min(720px, 90vw);
+max-height: 70vh;
+overflow-y: auto;
+display: none;
+box-shadow: 0 4px 24px rgba(80, 50, 10, 0.25);
+}
+#points-panel.open { display: block; }
+#points-panel h3 {
+margin: 0 0 8px 0;
+font-size: 16px;
+color: #4a3010;
+border-bottom: 1px solid #c8a85c;
+padding-bottom: 4px;
+font-weight: bold;
+}
+#points-panel p {
+margin: 0 0 8px 0;
+}
+#points-panel .term { font-weight: bold; color: #4a2a08; }
+#points-panel .greek { font-style: italic; color: #6b4a1a; }
+#points-panel .close-x {
+position: absolute;
+top: 6px; right: 10px;
+font-size: 18px; font-weight: bold;
+color: #6b4a1a;
+cursor: pointer;
+background: none; border: none;
+padding: 2px 8px;
+font-family: inherit;
+}
+#points-panel .close-x:hover { color: #2a1808; }
+
+/* Floating HTML labels as small chips around the canvas perimeter.
+   The header is a short tag (~120px wide); expanding reveals the
+   full title and paragraph from Troy's diagram. */
+.float-label {
+position: absolute;
+z-index: 8;
+background: rgba(248, 240, 218, 0.94);
+border: 1px solid #c8a85c;
+border-radius: 4px;
+padding: 4px 7px 5px 7px;
+font-family: Georgia, 'Times New Roman', serif;
+font-size: 11px;
+line-height: 1.4;
+color: #2a1f08;
+width: 120px;
+max-height: 320px;
+overflow-y: auto;
+box-shadow: 0 2px 8px rgba(80, 50, 10, 0.18);
+pointer-events: auto;
+display: none;
+}
+.float-label.expanded { width: 220px; z-index: 9; }
+#float-labels-layer.visible .float-label { display: block; }
+.float-label .fl-header {
+font-weight: bold;
+font-size: 11px;
+color: #4a2a08;
+cursor: pointer;
+user-select: none;
+display: flex;
+justify-content: space-between;
+align-items: center;
+gap: 4px;
+white-space: nowrap;
+overflow: hidden;
+text-overflow: ellipsis;
+}
+.float-label .fl-header .caret {
+font-size: 9px;
+transition: transform 0.15s;
+color: #8a6a20;
+flex-shrink: 0;
+}
+.float-label.expanded .fl-header .caret { transform: rotate(90deg); }
+.float-label .fl-full-title {
+display: none;
+font-weight: bold;
+font-size: 11.5px;
+color: #4a2a08;
+margin-top: 4px;
+padding-top: 4px;
+border-top: 1px solid #d8c08a;
+}
+.float-label.expanded .fl-full-title { display: block; }
+.float-label .fl-body {
+display: none;
+margin-top: 4px;
+font-size: 11px;
+}
+.float-label.expanded .fl-body { display: block; }
+.float-label .fl-body p { margin: 0 0 6px 0; }
+.float-label .term { font-weight: bold; color: #4a2a08; }
+.float-label .greek { font-style: italic; color: #6b4a1a; }
+
+/* Slot positions.  Top row clears the title block + corner buttons
+   (which end ~y=60).  Bottom slot clears the bottom buttons + hint. */
+
+/* Top-center: Archetypal Self */
+.float-label[data-fl-id="archetypal"] {
+  top: 70px; left: 50%; transform: translateX(-50%);
+}
+
+/* Left edge: Nous near upper-left (close to in-scene "Upper
+   Unconscious or NOUS" text), Sarx near lower-left (close to
+   in-scene "Lower Unconscious or SARX" text).  Archetypes sits
+   between them at mid-vertical, near the developmental ∞ rim. */
+.float-label[data-fl-id="nous"]       { top: 70px;     left: 12px; }
+.float-label[data-fl-id="archetypes"] { top: 32%; left: 12px; transform: translateY(-50%); }
+.float-label[data-fl-id="shadow"]     { bottom: 110px; left: 12px; }
+
+/* Right edge: Ego at mid-vertical (right of BODY text in scene),
+   Persona below it. */
+.float-label[data-fl-id="ego"]     { top: 45%; right: 12px; transform: translateY(-50%); }
+.float-label[data-fl-id="persona"] { top: 60%; right: 12px; transform: translateY(-50%); }
+
+/* Bottom row: Still Point (left of center) and Trauma (right of
+   center).  Both at the same vertical level above the bottom buttons
+   and camera-hint. */
+.float-label[data-fl-id="stillpoint"] {
+  bottom: 60px; left: 35%; transform: translateX(-50%);
+}
+.float-label[data-fl-id="trauma"] {
+  bottom: 60px; left: 65%; transform: translateX(-50%);
+}
+
+#float-labels-layer {
+position: absolute;
+inset: 0;
+pointer-events: none;
+z-index: 8;
+}
+#float-labels-layer .float-label { pointer-events: auto; }
+</style>
+
+</head>
+<body>
+
+  <div id="stage">
+    <div id="mount-area">
+    <div id="mount"></div>
+
+    <!-- Floating HTML labels: short-tag chips around the canvas
+         perimeter.  Header shows abbreviated tag; expanding reveals
+         the full title and the paragraph from Troy's diagram. -->
+    <div id="float-labels-layer">
+      <div class="float-label" data-fl-id="ego">
+        <div class="fl-header">
+          <span>Ego</span>
+          <span class="caret">&#9656;</span>
+        </div>
+        <div class="fl-full-title">Ego, Will, Body</div>
+        <div class="fl-body">
+          <p>The <span class="term">Ego</span> is the organ of our average waking consciousness. Through it, we exercise direct control over the <span class="term">Body</span> through our <span class="term">Will</span>, but not without influences from the deeper regions. In Greek, <span class="greek">Diánoia</span> (mind related to will) and <span class="greek">Techne</span> (mind related to analytic or technical knowledge) are distinctions English combines into &ldquo;Ego&rdquo; or &ldquo;conscious mind&rdquo;.</p>
+        </div>
+      </div>
+
+      <div class="float-label" data-fl-id="persona">
+        <div class="fl-header">
+          <span>Persona</span>
+          <span class="caret">&#9656;</span>
+        </div>
+        <div class="fl-full-title">Persona</div>
+        <div class="fl-body">
+          <p><span class="term">Persona</span> is the mask or front we put on for the public. When we over-identify with this outer self, living life primarily to please others, we lose contact with our deeper self and begin to experience ourselves as a shell, hollow, or shallow&mdash;not our true self. This causes our unfulfilled life potential to dam up under the organizing force of the <span class="term">Shadow</span>.</p>
+        </div>
+      </div>
+
+      <div class="float-label" data-fl-id="shadow">
+        <div class="fl-header">
+          <span>Sarx</span>
+          <span class="caret">&#9656;</span>
+        </div>
+        <div class="fl-full-title">Shadow / Sarx</div>
+        <div class="fl-body">
+          <p>The Shadow operates according to self-protective instincts. It collects the fragmented reactions and memories of our lives which are not integrated into the flow of wholeness of our higher unconscious. Lacking an empowered, integrating center, the Shadow and <span class="term">Lower Unconscious</span> react with a reflexive fight-or-flight response to situations of threat, sometimes overcoming the <span class="term">Ego Defenses&rsquo;</span> ability to contain them. From this process arises our compulsions, addictions, and other immature feelings and behaviors. The parallel Greek term is <span class="greek">Sarx</span>. Thus the Shadow can be seen as the organizing program for &ldquo;sinful nature&rdquo;. Notice how the <span class="greek">Sarx</span> rises to form a separation or &ldquo;veil&rdquo; between our consciousness and our deeper self and spirituality.</p>
+        </div>
+      </div>
+
+      <div class="float-label" data-fl-id="nous">
+        <div class="fl-header">
+          <span>Nous</span>
+          <span class="caret">&#9656;</span>
+        </div>
+        <div class="fl-full-title">Higher Unconscious / Nous</div>
+        <div class="fl-body">
+          <p>The higher values and spirituality of the <span class="term">Human Spirit</span> are mediated by the <span class="greek">Nous</span> or <span class="term">Higher Unconscious</span>. These communicate to our consciousness largely through symbols and higher intuition and are best experienced through inward stillness.</p>
+        </div>
+      </div>
+
+      <div class="float-label" data-fl-id="stillpoint">
+        <div class="fl-header">
+          <span>Still Point</span>
+          <span class="caret">&#9656;</span>
+        </div>
+        <div class="fl-full-title">Still Point</div>
+        <div class="fl-body">
+          <p>The inward center of our soul is the <span class="term">Still Point</span>. In calm centeredness, we feel most genuinely ourselves. This is where our consciousness rests in deep relaxation, reflection, deep prayer, meditation, and contemplation. The latter three can involve even higher realms as well.</p>
+        </div>
+      </div>
+
+      <div class="float-label" data-fl-id="archetypal">
+        <div class="fl-header">
+          <span>Archetypal Self</span>
+          <span class="caret">&#9656;</span>
+        </div>
+        <div class="fl-full-title">Anima/Animus &amp; Archetypal Self</div>
+        <div class="fl-body">
+          <p>Symbols uniting masculine and feminine are among the highest in the <span class="greek">nous</span>, e.g. spiritual marriage imagery of <span class="greek">Song of Songs</span>. These arise from the <span class="term">Anima/Animus</span>. The highest psychic organizer, beyond symbol and concept, is the <span class="term">Archetypal Self</span>. It and God are the source of <span class="term">dreams</span> which often <span class="term">depict the various lower parts</span>.</p>
+        </div>
+      </div>
+
+      <div class="float-label" data-fl-id="archetypes">
+        <div class="fl-header">
+          <span>Archetypes &infin;</span>
+          <span class="caret">&#9656;</span>
+        </div>
+        <div class="fl-full-title">Archetypes (&infin;)</div>
+        <div class="fl-body">
+          <p>The <span class="term">&infin;</span> symbol represents an <span class="term">Archetype</span>: an instinctual, universal pattern of natural motivation and natural revelation, with a <span class="term">bipolar structure</span>.</p>
+          <p>The two loops of the figure-eight express the polarity inherent in every archetype &mdash; positive and negative, light and shadow, masculine and feminine. At the bottom of the developmental rim the loops begin to <span class="greek">separate</span>, signaling fragmentation under trauma.</p>
+        </div>
+      </div>
+
+      <div class="float-label" data-fl-id="trauma">
+        <div class="fl-header">
+          <span>Trauma</span>
+          <span class="caret">&#9656;</span>
+        </div>
+        <div class="fl-full-title">Traumatic Complex with</div>
+        <div class="fl-body">
+          <p style="margin-bottom: 4px;"><span class="term">1)</span> <span class="term">Critical Parent Parts</span><br>
+          &nbsp;&nbsp;&nbsp;&nbsp;(Shame &amp; Guilt)</p>
+          <p style="margin-bottom: 4px;"><span class="term">2)</span> <span class="term">Aggressive, self-protective part</span><br>
+          &nbsp;&nbsp;&nbsp;&nbsp;(Excessive Anger, Defensiveness)</p>
+          <p style="margin-bottom: 0;"><span class="term">3)</span> <span class="term">Wounded Inner Child</span><br>
+          &nbsp;&nbsp;&nbsp;&nbsp;(Fear, Sorrow, Unbonded Aloneness)</p>
+        </div>
+      </div>
+    </div>
+
+```
+<div id="title-block">
+  <div class="h1">THE PSYCHE</div>
+  <div class="h2">(Soul)</div>
+  <div class="h3">Troy Caldwell, MD &nbsp;[<a href="https://troycaldwell.com" target="_blank" rel="noopener" style="color: inherit; text-decoration: underline;">troycaldwell.com</a>]</div>
+</div>
+
+<!-- Camera Angles button (overlay on canvas, opens side-strip pane) -->
+<button id="camera-toggle">Camera Angles &#9662;</button>
+<div id="camera-panel">
+  <div class="ctrl-label">Camera tilt (up / down)</div>
+  <input type="range" id="elevation-slider"
+         min="-80" max="80" value="7" step="1" />
+
+  <div class="ctrl-label">Latitude &mdash;
+    <span id="latitude-readout" class="readout">center</span></div>
+  <input type="range" id="latitude-slider"
+         min="-3.5" max="3.5" value="0" step="0.05" />
+
+  <div class="ctrl-label">Longitude (rotate around axis)</div>
+  <input type="range" id="longitude-slider"
          min="0" max="360" value="0" step="1" />
 
   <div class="ctrl-label">Side-to-side pan (left / right)</div>
